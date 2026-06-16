@@ -102,19 +102,13 @@ export function calculateStock(companyCumulativeContracts: number): number {
   return 10_000 + (companyCumulativeContracts - 1) * 30_000
 }
 
-/** KAETAI月次入金（2年目: 2か月前+1か月前+当月 / 1年目: 当月+前月） */
+/** KAETAI月次入金（契約月50万 + 翌月50万） */
 export function calculateKaetaiRevenue(
   currentMonthContracts: number,
   previousMonthContracts: number,
-  twoMonthsAgoContracts: number,
-  isYear2 = false
+  _twoMonthsAgoContracts?: number,
+  _isYear2 = false
 ): number {
-  if (isYear2) {
-    return (
-      (twoMonthsAgoContracts + previousMonthContracts + currentMonthContracts) *
-      KAETAI_PAYMENT_PER_INSTALLMENT
-    )
-  }
   return (
     currentMonthContracts * KAETAI_PAYMENT_PER_INSTALLMENT +
     previousMonthContracts * KAETAI_PAYMENT_PER_INSTALLMENT
@@ -141,10 +135,10 @@ export function calculateMarchBonus(reserveBeforeBonus: number): MarchBonusBreak
   const companyKeep = roundToSen(reserveBeforeBonus * 0.5)
   const pool = reserveBeforeBonus - companyKeep
   const company = roundToSen(pool * MARCH_BONUS_RATES.company)
+  const personalTotal = pool - company
   const daihyo = roundToSen(pool * MARCH_BONUS_RATES.daihyo)
   const punk = roundToSen(pool * MARCH_BONUS_RATES.punk)
-  const canary = roundToSen(pool * MARCH_BONUS_RATES.canary)
-  const personalTotal = daihyo + punk + canary
+  const canary = personalTotal - daihyo - punk
 
   return {
     reserveBeforeBonus,

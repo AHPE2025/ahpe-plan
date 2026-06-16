@@ -68,7 +68,7 @@ export default function TargetKPI() {
           {activeTab === "compare" ? (
             <CompareView actuals={actuals} />
           ) : (
-            <YearView isYear2={isYear2} />
+            <YearView key={isYear2 ? "year2" : "year1"} isYear2={isYear2} />
           )}
         </div>
       </div>
