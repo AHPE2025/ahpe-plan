@@ -18,6 +18,7 @@ export const MARCH_BONUS_RATES = {
 export type MonthlyInput = {
   month: string
   honne: number
+  honneContractPeople: number
   training: number
   kaetaiContracts: number
   cost: number
@@ -28,6 +29,7 @@ export type MonthlyInput = {
 export type CalculatedMonthRow = {
   month: string
   honne: number
+  honneContractPeople: number
   training: number
   kaetai: number
   kaetaiPeriodCumulative: number
@@ -61,6 +63,7 @@ export type YearCalculationResult = {
   rows: CalculatedMonthRow[]
   totals: {
     honne: number
+    honneContractPeople: number
     training: number
     kaetai: number
     kaetaiPeriodCumulative: number
@@ -85,7 +88,9 @@ export type YearCalculationResult = {
 
 export type YearCalcOptions = {
   priorCompanyContracts: number
-  /** 期首直前月の新規契約数（翌月入金分の計上用） */
+  /** 期首2か月前の新規契約数（KAETAI第2回入金分の計上用） */
+  priorTwoMonthContracts?: number
+  /** 期首直前月の新規契約数（KAETAI第2回入金分の計上用） */
   priorMonthContracts?: number
   isYear2: boolean
   octoberBonusPerPerson?: number
@@ -97,11 +102,19 @@ export function calculateStock(companyCumulativeContracts: number): number {
   return 10_000 + (companyCumulativeContracts - 1) * 30_000
 }
 
-/** KAETAI月次入金 = 当月新規×50万 + 前月新規×50万 */
+/** KAETAI月次入金（2年目: 2か月前+1か月前+当月 / 1年目: 当月+前月） */
 export function calculateKaetaiRevenue(
   currentMonthContracts: number,
-  previousMonthContracts: number
+  previousMonthContracts: number,
+  twoMonthsAgoContracts: number,
+  isYear2 = false
 ): number {
+  if (isYear2) {
+    return (
+      (twoMonthsAgoContracts + previousMonthContracts + currentMonthContracts) *
+      KAETAI_PAYMENT_PER_INSTALLMENT
+    )
+  }
   return (
     currentMonthContracts * KAETAI_PAYMENT_PER_INSTALLMENT +
     previousMonthContracts * KAETAI_PAYMENT_PER_INSTALLMENT
@@ -119,13 +132,18 @@ export function getSalaryPerPerson(
   return Math.max(0, Math.round(profitBeforeSalary * SALARY_RATE_PER_PERSON))
 }
 
+/** 0.1万円単位で丸める（131.376万 → 131.4万） */
+function roundToSen(value: number): number {
+  return Math.round(value / 1000) * 1000
+}
+
 export function calculateMarchBonus(reserveBeforeBonus: number): MarchBonusBreakdown {
-  const companyKeep = Math.round(reserveBeforeBonus * 0.5)
+  const companyKeep = roundToSen(reserveBeforeBonus * 0.5)
   const pool = reserveBeforeBonus - companyKeep
-  const company = Math.round(pool * MARCH_BONUS_RATES.company)
-  const daihyo = Math.round(pool * MARCH_BONUS_RATES.daihyo)
-  const punk = Math.round(pool * MARCH_BONUS_RATES.punk)
-  const canary = Math.round(pool * MARCH_BONUS_RATES.canary)
+  const company = roundToSen(pool * MARCH_BONUS_RATES.company)
+  const daihyo = roundToSen(pool * MARCH_BONUS_RATES.daihyo)
+  const punk = roundToSen(pool * MARCH_BONUS_RATES.punk)
+  const canary = roundToSen(pool * MARCH_BONUS_RATES.canary)
   const personalTotal = daihyo + punk + canary
 
   return {
@@ -146,6 +164,7 @@ export function calculateYearPlan(
 ): YearCalculationResult {
   const {
     priorCompanyContracts,
+    priorTwoMonthContracts = 0,
     priorMonthContracts = 0,
     isYear2,
     octoberBonusPerPerson = 0,
@@ -154,13 +173,19 @@ export function calculateYearPlan(
   let kaetaiPeriodCumulative = 0
   let companyCumulative = priorCompanyContracts
   let salaryCumulativePerPerson = 0
+  let twoMonthsAgoContracts = priorTwoMonthContracts
   let prevMonthContracts = priorMonthContracts
 
   const rows: CalculatedMonthRow[] = months.map((input, monthIndex) => {
     kaetaiPeriodCumulative += input.kaetaiContracts
     companyCumulative += input.kaetaiContracts
 
-    const kaetai = calculateKaetaiRevenue(input.kaetaiContracts, prevMonthContracts)
+    const kaetai = calculateKaetaiRevenue(
+      input.kaetaiContracts,
+      prevMonthContracts,
+      twoMonthsAgoContracts,
+      isYear2
+    )
     const stock = calculateStock(companyCumulative)
     const totalRevenue = input.honne + input.training + kaetai + stock
     const profitBeforeSalary = totalRevenue - input.cost
@@ -171,11 +196,13 @@ export function calculateYearPlan(
     const octoberBonusPerPersonAmount = octoberBonusTotal > 0 ? octoberBonusTotal / 3 : 0
     const netReceivePerPerson = salaryPerPerson + octoberBonusPerPersonAmount
 
+    twoMonthsAgoContracts = prevMonthContracts
     prevMonthContracts = input.kaetaiContracts
 
     return {
       month: input.month,
       honne: input.honne,
+      honneContractPeople: input.honneContractPeople,
       training: input.training,
       kaetai,
       kaetaiPeriodCumulative,
@@ -239,6 +266,7 @@ export function calculateYearPlan(
 
   const totals = {
     honne: rows.reduce((s, r) => s + r.honne, 0),
+    honneContractPeople: rows.reduce((s, r) => s + r.honneContractPeople, 0),
     training: rows.reduce((s, r) => s + r.training, 0),
     kaetai: rows.reduce((s, r) => s + r.kaetai, 0),
     kaetaiPeriodCumulative,

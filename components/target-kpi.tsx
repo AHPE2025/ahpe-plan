@@ -1,25 +1,16 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import Navigation from "./navigation"
 import PlanTable from "./PlanTable"
 import { useData, calculateActuals } from "@/lib/data-context"
 import { year1Targets, year1Meta, year1Months } from "@/data/year1"
 import { year2Targets, year2Meta, year2Months } from "@/data/year2"
-import { calculateYearPlan } from "@/lib/calculate"
+import { calculateYearPlan, type MonthlyInput, type YearCalcOptions } from "@/lib/calculate"
+import { formatNumber, parseNumber, formatManYen, formatManDecimalYen } from "@/lib/utils"
 
 function formatYen(value: number) {
-  return `¥${value.toLocaleString("ja-JP")}`
-}
-
-function formatMan(value: number) {
-  const man = Math.round(value / 10000)
-  return `${man}万円`
-}
-
-function formatManDecimal(value: number) {
-  const man = Math.round(value / 1000) / 10
-  return `${man}万円`
+  return `¥${formatNumber(value)}`
 }
 
 function ProgressBar({ current, target, color = "emerald" }: { current: number; target: number; color?: string }) {
@@ -39,25 +30,7 @@ export default function TargetKPI() {
   const [activeTab, setActiveTab] = useState<"year1" | "year2" | "compare">("year1")
   const { rows } = useData()
   const actuals = useMemo(() => calculateActuals(rows), [rows])
-  const targets = activeTab === "year2" ? year2Targets : year1Targets
   const isYear2 = activeTab === "year2"
-
-  const computed = useMemo(
-    () =>
-      isYear2
-        ? calculateYearPlan(year2Months, {
-            priorCompanyContracts: year2Meta.priorCompanyContracts,
-            priorMonthContracts: year2Meta.priorMonthContracts,
-            isYear2: true,
-            octoberBonusPerPerson: year2Meta.octoberBonusPerPerson,
-          })
-        : calculateYearPlan(year1Months, {
-            priorCompanyContracts: year1Meta.priorCompanyContracts,
-            priorMonthContracts: year1Meta.priorMonthContracts,
-            isYear2: false,
-          }),
-    [isYear2]
-  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -95,7 +68,7 @@ export default function TargetKPI() {
           {activeTab === "compare" ? (
             <CompareView actuals={actuals} />
           ) : (
-            <YearView targets={targets} isYear2={isYear2} computed={computed} />
+            <YearView isYear2={isYear2} />
           )}
         </div>
       </div>
@@ -103,15 +76,96 @@ export default function TargetKPI() {
   )
 }
 
-function YearView({
-  targets,
-  isYear2,
-  computed,
+function HonneContractPeopleTargetCell({
+  actual,
+  target,
+  onTargetChange,
 }: {
-  targets: typeof year1Targets | typeof year2Targets
-  isYear2: boolean
-  computed: ReturnType<typeof calculateYearPlan>
+  actual: number
+  target: number | null
+  onTargetChange: (v: number | null) => void
 }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const displayValue = target ?? actual
+
+  const startEdit = () => {
+    setDraft(String(displayValue))
+    setEditing(true)
+  }
+
+  const commit = () => {
+    const parsed = parseNumber(draft)
+    if (parsed >= 0) {
+      onTargetChange(parsed === actual ? null : parsed)
+    }
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <input
+          autoFocus
+          type="text"
+          value={draft}
+          onChange={(e) => {
+            const raw = e.target.value.replace(/,/g, "")
+            if (raw === "" || /^\d+$/.test(raw)) setDraft(raw)
+          }}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit()
+            if (e.key === "Escape") setEditing(false)
+          }}
+          className="w-16 rounded border border-blue-400 bg-blue-50 px-1 py-0.5 text-right text-sm focus:outline-none"
+        />
+        <span className="text-xs text-gray-400">人</span>
+      </span>
+    )
+  }
+
+  return (
+    <button
+      onClick={startEdit}
+      title="クリックして目標値を編集（実績は月次入力の合計）"
+      className="cursor-pointer rounded px-1 py-0.5 text-right text-sm hover:bg-blue-50 hover:ring-1 hover:ring-blue-300"
+    >
+      <span className="font-medium">{displayValue}人</span>
+      {target !== null && target !== actual && (
+        <span className="ml-1 text-xs text-gray-400">（実績{actual}人）</span>
+      )}
+    </button>
+  )
+}
+
+function YearView({ isYear2 }: { isYear2: boolean }) {
+  const targets = isYear2 ? year2Targets : year1Targets
+  const initialMonths = isYear2 ? year2Months : year1Months
+  const calcOptions: YearCalcOptions = isYear2
+    ? {
+        priorCompanyContracts: year2Meta.priorCompanyContracts,
+        priorTwoMonthContracts: year2Meta.priorTwoMonthContracts,
+        priorMonthContracts: year2Meta.priorMonthContracts,
+        isYear2: true,
+        octoberBonusPerPerson: year2Meta.octoberBonusPerPerson,
+      }
+    : {
+        priorCompanyContracts: year1Meta.priorCompanyContracts,
+        priorMonthContracts: year1Meta.priorMonthContracts,
+        isYear2: false,
+      }
+
+  const [plan, setPlan] = useState<MonthlyInput[]>(() => initialMonths.map((m) => ({ ...m })))
+  const [honneContractPeopleTarget, setHonneContractPeopleTarget] = useState<number | null>(null)
+
+  const computed = useMemo(() => calculateYearPlan(plan, calcOptions), [plan, calcOptions])
+  const honneContractPeopleActual = computed.totals.honneContractPeople
+
+  const handlePlanChange = useCallback((newPlan: MonthlyInput[]) => {
+    setPlan(newPlan)
+  }, [])
+
   const [bonusOpen, setBonusOpen] = useState(false)
   const marchBonus = isYear2 ? year2Targets.bonus.march : null
 
@@ -135,34 +189,82 @@ function YearView({
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">総売上</div>
-          <div className="mt-1 text-lg font-bold text-gray-900">{formatMan(computed.totals.totalRevenue)}</div>
+          <div className="mt-1 text-lg font-bold text-gray-900">{formatManYen(computed.totals.totalRevenue)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">コスト</div>
-          <div className="mt-1 text-lg font-bold text-red-600">{formatMan(computed.totals.cost)}</div>
+          <div className="mt-1 text-lg font-bold text-red-600">{formatManYen(computed.totals.cost)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">総利益（給与前）</div>
-          <div className="mt-1 text-lg font-bold text-gray-900">{formatMan(computed.totals.profitBeforeSalary)}</div>
+          <div className="mt-1 text-lg font-bold text-gray-900">{formatManYen(computed.totals.profitBeforeSalary)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">給与累計（1人）</div>
-          <div className="mt-1 text-lg font-bold text-blue-600">{formatManDecimal(computed.totals.salaryPerPerson)}</div>
+          <div className="mt-1 text-lg font-bold text-blue-600">{formatManDecimalYen(computed.totals.salaryPerPerson)}</div>
           {isYear2 && <div className="mt-0.5 text-xs text-gray-400">4-6月:利益×20%、7月〜:固定50万</div>}
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">給与総額（3人）</div>
-          <div className="mt-1 text-lg font-bold text-blue-600">{formatManDecimal(computed.totals.salaryTotal3)}</div>
+          <div className="mt-1 text-lg font-bold text-blue-600">{formatManDecimalYen(computed.totals.salaryTotal3)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">会社最終内部留保</div>
-          <div className="mt-1 text-lg font-bold text-emerald-600">{formatManDecimal(computed.totals.internalReserve)}</div>
+          <div className="mt-1 text-lg font-bold text-emerald-600">{formatManDecimalYen(computed.totals.internalReserve)}</div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
-          <h3 className="text-lg font-bold text-gray-900">売上内訳</h3>
+          <h3 className="text-lg font-bold text-gray-900">KPI（売上・契約）</h3>
+          <table className="mt-4 w-full">
+            <thead>
+              <tr className="border-b border-gray-200 text-left text-sm text-gray-500">
+                <th className="pb-3 font-medium">項目</th>
+                <th className="pb-3 text-right font-medium">値</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              <tr className="border-b border-gray-100">
+                <td className="py-3">HONNE売上</td>
+                <td className="py-3 text-right font-medium">{formatManYen(computed.totals.honne)}</td>
+              </tr>
+              <tr className="border-b border-gray-100">
+                <td className="py-3">HONNE契約人数合計</td>
+                <td className="py-3 text-right">
+                  <HonneContractPeopleTargetCell
+                    actual={honneContractPeopleActual}
+                    target={honneContractPeopleTarget}
+                    onTargetChange={setHonneContractPeopleTarget}
+                  />
+                </td>
+              </tr>
+              <tr className="border-b border-gray-100">
+                <td className="py-3">AI研修売上</td>
+                <td className="py-3 text-right font-medium">{formatManYen(computed.totals.training)}</td>
+              </tr>
+              <tr className="border-b border-gray-100">
+                <td className="py-3">KAETAI売上</td>
+                <td className="py-3 text-right font-medium">{formatManYen(computed.totals.kaetai)}</td>
+              </tr>
+              <tr className="border-b border-gray-100">
+                <td className="py-3">KAETAI契約数</td>
+                <td className="py-3 text-right font-medium">{computed.totals.kaetaiPeriodCumulative}社</td>
+              </tr>
+              <tr className="border-b border-gray-100">
+                <td className="py-3">ストック売上</td>
+                <td className="py-3 text-right font-medium">{formatManYen(computed.totals.stock)}</td>
+              </tr>
+              <tr className="bg-gray-50">
+                <td className="py-3 font-medium">総売上</td>
+                <td className="py-3 text-right font-bold text-emerald-600">{formatManYen(computed.totals.totalRevenue)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
+          <h3 className="text-lg font-bold text-gray-900">売上内訳（目標値）</h3>
           <table className="mt-4 w-full">
             <thead>
               <tr className="border-b border-gray-200 text-left text-sm text-gray-500">
@@ -173,23 +275,31 @@ function YearView({
             <tbody className="text-sm">
               <tr className="border-b border-gray-100">
                 <td className="py-3">HONNE</td>
-                <td className="py-3 text-right font-medium">{formatMan(targets.sales.honne)}</td>
+                <td className="py-3 text-right font-medium">{formatManYen(targets.sales.honne)}</td>
+              </tr>
+              <tr className="border-b border-gray-100">
+                <td className="py-3">HONNE契約人数合計</td>
+                <td className="py-3 text-right font-medium">{targets.sales.honneContractPeople}人</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-3">AI研修</td>
-                <td className="py-3 text-right font-medium">{formatMan(targets.sales.training)}</td>
+                <td className="py-3 text-right font-medium">{formatManYen(targets.sales.training)}</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-3">KAETAI</td>
-                <td className="py-3 text-right font-medium">{formatMan(targets.sales.kaetai)}</td>
+                <td className="py-3 text-right font-medium">{formatManYen(targets.sales.kaetai)}</td>
+              </tr>
+              <tr className="border-b border-gray-100">
+                <td className="py-3">KAETAI契約数</td>
+                <td className="py-3 text-right font-medium">{targets.sales.kaetaiContracts}社</td>
               </tr>
               <tr className="border-b border-gray-100">
                 <td className="py-3">ストック</td>
-                <td className="py-3 text-right font-medium">{formatMan(targets.sales.stock)}</td>
+                <td className="py-3 text-right font-medium">{formatManYen(targets.sales.stock)}</td>
               </tr>
               <tr className="bg-gray-50">
                 <td className="py-3 font-medium">合計</td>
-                <td className="py-3 text-right font-bold text-emerald-600">{formatMan(targets.sales.total)}</td>
+                <td className="py-3 text-right font-bold text-emerald-600">{formatManYen(targets.sales.total)}</td>
               </tr>
             </tbody>
           </table>
@@ -207,21 +317,21 @@ function YearView({
             <tbody className="text-sm">
               <tr className="border-b border-gray-100">
                 <td className="py-3">紹介料（3%）</td>
-                <td className="py-3 text-right font-medium">{formatMan(targets.costs.referral)}</td>
+                <td className="py-3 text-right font-medium">{formatManYen(targets.costs.referral)}</td>
               </tr>
               {isYear2 && (
                 <tr className="border-b border-gray-100">
                   <td className="py-3">業務委託（2人×20万×6ヶ月）</td>
-                  <td className="py-3 text-right font-medium">{formatMan((targets.costs as typeof year2Targets.costs).outsource)}</td>
+                  <td className="py-3 text-right font-medium">{formatManYen((targets.costs as typeof year2Targets.costs).outsource)}</td>
                 </tr>
               )}
               <tr className="border-b border-gray-100">
                 <td className="py-3">AI/営業/雑費</td>
-                <td className="py-3 text-right font-medium">{formatMan(targets.costs.aiAndOther)}</td>
+                <td className="py-3 text-right font-medium">{formatManYen(targets.costs.aiAndOther)}</td>
               </tr>
               <tr className="bg-gray-50">
                 <td className="py-3 font-medium">合計</td>
-                <td className="py-3 text-right font-bold text-red-600">{formatMan(targets.costs.total)}</td>
+                <td className="py-3 text-right font-bold text-red-600">{formatManYen(targets.costs.total)}</td>
               </tr>
             </tbody>
           </table>
@@ -233,44 +343,33 @@ function YearView({
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
           <div className="rounded-xl bg-gray-50 p-4">
             <div className="text-sm text-gray-500">総売上</div>
-            <div className="mt-1 text-xl font-bold text-gray-900">{formatMan(computed.totals.totalRevenue)}</div>
+            <div className="mt-1 text-xl font-bold text-gray-900">{formatManYen(computed.totals.totalRevenue)}</div>
           </div>
           <div className="rounded-xl bg-gray-50 p-4">
             <div className="text-sm text-gray-500">コスト</div>
-            <div className="mt-1 text-xl font-bold text-red-600">-{formatMan(computed.totals.cost)}</div>
+            <div className="mt-1 text-xl font-bold text-red-600">-{formatManYen(computed.totals.cost)}</div>
           </div>
           <div className="rounded-xl bg-blue-50 p-4">
             <div className="text-sm text-gray-500">営業利益（給与前）</div>
-            <div className="mt-1 text-xl font-bold text-gray-900">{formatMan(computed.totals.profitBeforeSalary)}</div>
+            <div className="mt-1 text-xl font-bold text-gray-900">{formatManYen(computed.totals.profitBeforeSalary)}</div>
           </div>
           <div className="rounded-xl bg-emerald-50 p-4">
             <div className="text-sm text-gray-500">内部留保</div>
-            <div className="mt-1 text-xl font-bold text-emerald-600">{formatManDecimal(computed.totals.internalReserve)}</div>
+            <div className="mt-1 text-xl font-bold text-emerald-600">{formatManDecimalYen(computed.totals.internalReserve)}</div>
           </div>
         </div>
         <p className="mt-4 text-sm text-gray-600">
           {isYear2
-            ? `給与: 4-6月は総利益×20%/人、7月以降固定50万/人 → 給与総額（3人）= ${formatManDecimal(computed.totals.salaryTotal3)}`
-            : `給与は営業利益の60%（1人20%）= ${formatMan(computed.totals.salaryTotal3)}、内部留保は40% = ${formatManDecimal(computed.totals.internalReserve)}`}
+            ? `給与: 4-6月は総利益×20%/人、7月以降固定50万/人 → 給与総額（3人）= ${formatManDecimalYen(computed.totals.salaryTotal3)}`
+            : `給与は営業利益の60%（1人20%）= ${formatManYen(computed.totals.salaryTotal3)}、内部留保は40% = ${formatManDecimalYen(computed.totals.internalReserve)}`}
         </p>
       </div>
 
       <PlanTable
-        initialMonths={isYear2 ? year2Months : year1Months}
-        calcOptions={
-          isYear2
-            ? {
-                priorCompanyContracts: year2Meta.priorCompanyContracts,
-                priorMonthContracts: year2Meta.priorMonthContracts,
-                isYear2: true,
-                octoberBonusPerPerson: year2Meta.octoberBonusPerPerson,
-              }
-            : {
-                priorCompanyContracts: year1Meta.priorCompanyContracts,
-                priorMonthContracts: year1Meta.priorMonthContracts,
-                isYear2: false,
-              }
-        }
+        key={isYear2 ? "year2" : "year1"}
+        plan={plan}
+        onPlanChange={handlePlanChange}
+        calcOptions={calcOptions}
         isYear2={isYear2}
       />
 
@@ -286,7 +385,7 @@ function YearView({
         </ul>
         {!isYear2 && (
           <div className="mt-4 rounded-xl bg-amber-50 p-4">
-            <div className="text-sm font-medium text-amber-800">借入: {formatMan(year1Targets.loan)}</div>
+            <div className="text-sm font-medium text-amber-800">借入: {formatManYen(year1Targets.loan)}</div>
             <div className="text-xs text-amber-600">1年目はボーナスなし（内部留保372万 - 借入700万）</div>
           </div>
         )}
@@ -306,7 +405,7 @@ function YearView({
               >
                 <div>
                   <span className="text-sm font-medium text-emerald-800">
-                    3月通常ボーナス：個人支給合計 {formatManDecimal(marchBonus.personalTotal)}
+                    3月通常ボーナス：個人支給合計 {formatManDecimalYen(marchBonus.personalTotal)}
                   </span>
                   <span className="ml-2 text-xs text-emerald-500">ゾノ25% / パンク14% / カナリア11% / 会社50%</span>
                 </div>
@@ -320,21 +419,21 @@ function YearView({
                     <tbody>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5">通常ボーナス前の当期内部留保</td>
-                        <td className="py-1.5 text-right font-medium">{formatManDecimal(marchBonus.reserveBeforeBonus)}</td>
+                        <td className="py-1.5 text-right font-medium">{formatManDecimalYen(marchBonus.reserveBeforeBonus)}</td>
                       </tr>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5">会社に残す50%</td>
-                        <td className="py-1.5 text-right font-medium">{formatManDecimal(marchBonus.companyKeep)}</td>
+                        <td className="py-1.5 text-right font-medium">{formatManDecimalYen(marchBonus.companyKeep)}</td>
                       </tr>
                       <tr>
                         <td className="py-1.5 font-semibold">分配原資（残り50%）</td>
-                        <td className="py-1.5 text-right font-bold">{formatManDecimal(marchBonus.pool)}</td>
+                        <td className="py-1.5 text-right font-bold">{formatManDecimalYen(marchBonus.pool)}</td>
                       </tr>
                     </tbody>
                   </table>
 
                   <p className="mt-3 text-xs font-semibold text-emerald-700">
-                    ステップ2：分配原資 {formatManDecimal(marchBonus.pool)} の配分
+                    ステップ2：分配原資 {formatManDecimalYen(marchBonus.pool)} の配分
                   </p>
                   <table className="mt-2 w-full text-xs">
                     <thead>
@@ -348,27 +447,27 @@ function YearView({
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5">会社</td>
                         <td className="py-1.5 text-right">50%</td>
-                        <td className="py-1.5 text-right font-medium">{formatManDecimal(marchBonus.company)}</td>
+                        <td className="py-1.5 text-right font-medium">{formatManDecimalYen(marchBonus.company)}</td>
                       </tr>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5 font-semibold text-emerald-800">ゾノ</td>
                         <td className="py-1.5 text-right font-semibold">25%</td>
-                        <td className="py-1.5 text-right font-bold text-emerald-800">{formatManDecimal(marchBonus.daihyo)}</td>
+                        <td className="py-1.5 text-right font-bold text-emerald-800">{formatManDecimalYen(marchBonus.daihyo)}</td>
                       </tr>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5 font-semibold text-emerald-800">パンク</td>
                         <td className="py-1.5 text-right font-semibold">14%</td>
-                        <td className="py-1.5 text-right font-bold text-emerald-800">{formatManDecimal(marchBonus.punk)}</td>
+                        <td className="py-1.5 text-right font-bold text-emerald-800">{formatManDecimalYen(marchBonus.punk)}</td>
                       </tr>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5 font-semibold text-emerald-800">カナリア</td>
                         <td className="py-1.5 text-right font-semibold">11%</td>
-                        <td className="py-1.5 text-right font-bold text-emerald-800">{formatManDecimal(marchBonus.canary)}</td>
+                        <td className="py-1.5 text-right font-bold text-emerald-800">{formatManDecimalYen(marchBonus.canary)}</td>
                       </tr>
                       <tr className="bg-emerald-100/60">
                         <td className="py-1.5 font-semibold">個人合計</td>
                         <td className="py-1.5 text-right font-semibold">50%</td>
-                        <td className="py-1.5 text-right font-bold">{formatManDecimal(marchBonus.personalTotal)}</td>
+                        <td className="py-1.5 text-right font-bold">{formatManDecimalYen(marchBonus.personalTotal)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -378,15 +477,15 @@ function YearView({
                     <tbody>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5">通常ボーナス前の当期内部留保</td>
-                        <td className="py-1.5 text-right">{formatManDecimal(marchBonus.reserveBeforeBonus)}</td>
+                        <td className="py-1.5 text-right">{formatManDecimalYen(marchBonus.reserveBeforeBonus)}</td>
                       </tr>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5">個人への3月通常ボーナス</td>
-                        <td className="py-1.5 text-right">-{formatManDecimal(marchBonus.personalTotal)}</td>
+                        <td className="py-1.5 text-right">-{formatManDecimalYen(marchBonus.personalTotal)}</td>
                       </tr>
                       <tr>
                         <td className="py-1.5 font-semibold">会社最終内部留保</td>
-                        <td className="py-1.5 text-right font-bold">{formatManDecimal(computed.totals.internalReserve)}</td>
+                        <td className="py-1.5 text-right font-bold">{formatManDecimalYen(computed.totals.internalReserve)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -401,7 +500,7 @@ function YearView({
         <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
           <h3 className="text-lg font-bold text-gray-900">個人年収</h3>
           <p className="mt-1 text-xs text-gray-400">
-            給与{formatManDecimal(computed.totals.salaryPerPerson)} + 10月ボーナス50万 + 3月通常ボーナス
+            給与{formatManDecimalYen(computed.totals.salaryPerPerson)} + 10月ボーナス50万 + 3月通常ボーナス
           </p>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
             {(
@@ -414,12 +513,12 @@ function YearView({
               <div key={key} className="rounded-xl bg-gray-50 p-4">
                 <div className="text-sm font-medium text-gray-700">{name}</div>
                 <div className="mt-1 text-2xl font-bold text-gray-900">
-                  {formatManDecimal(year2Targets.annualIncome[key])}
+                  {formatManDecimalYen(year2Targets.annualIncome[key])}
                 </div>
                 <div className="mt-2 space-y-1 text-xs text-gray-500">
                   <div className="flex justify-between">
                     <span>給与累計</span>
-                    <span>{formatManDecimal(computed.totals.salaryPerPerson)}</span>
+                    <span>{formatManDecimalYen(computed.totals.salaryPerPerson)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>10月ボーナス</span>
@@ -427,7 +526,7 @@ function YearView({
                   </div>
                   <div className="flex justify-between font-medium text-emerald-600">
                     <span>3月通常ボーナス</span>
-                    <span>{formatManDecimal(mb)}</span>
+                    <span>{formatManDecimalYen(mb)}</span>
                   </div>
                 </div>
               </div>
@@ -452,9 +551,9 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
           <div className="rounded-xl bg-gray-50 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">総売上</span>
-              <span className="text-xs text-gray-400">目標: {formatMan(targets.sales.total)}</span>
+              <span className="text-xs text-gray-400">目標: {formatManYen(targets.sales.total)}</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-gray-900">{formatMan(actuals.totalRevenue)}</div>
+            <div className="mt-2 text-2xl font-bold text-gray-900">{formatManYen(actuals.totalRevenue)}</div>
             <div className="mt-3">
               <ProgressBar current={actuals.totalRevenue} target={targets.sales.total} />
             </div>
@@ -463,9 +562,9 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
           <div className="rounded-xl bg-blue-50 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-blue-600">HONNE売上</span>
-              <span className="text-xs text-blue-400">目標: {formatMan(targets.sales.honne)}</span>
+              <span className="text-xs text-blue-400">目標: {formatManYen(targets.sales.honne)}</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-blue-700">{formatMan(actuals.totalHonne)}</div>
+            <div className="mt-2 text-2xl font-bold text-blue-700">{formatManYen(actuals.totalHonne)}</div>
             <div className="mt-3">
               <ProgressBar current={actuals.totalHonne} target={targets.sales.honne} color="blue" />
             </div>
@@ -474,9 +573,9 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
           <div className="rounded-xl bg-green-50 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-green-600">AI研修売上</span>
-              <span className="text-xs text-green-400">目標: {formatMan(targets.sales.training)}</span>
+              <span className="text-xs text-green-400">目標: {formatManYen(targets.sales.training)}</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-green-700">{formatMan(actuals.totalTraining)}</div>
+            <div className="mt-2 text-2xl font-bold text-green-700">{formatManYen(actuals.totalTraining)}</div>
             <div className="mt-3">
               <ProgressBar current={actuals.totalTraining} target={targets.sales.training} color="emerald" />
             </div>
@@ -485,9 +584,9 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
           <div className="rounded-xl bg-orange-50 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-orange-600">KAETAI売上</span>
-              <span className="text-xs text-orange-400">目標: {formatMan(targets.sales.kaetai)}</span>
+              <span className="text-xs text-orange-400">目標: {formatManYen(targets.sales.kaetai)}</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-orange-700">{formatMan(actuals.totalKaetai)}</div>
+            <div className="mt-2 text-2xl font-bold text-orange-700">{formatManYen(actuals.totalKaetai)}</div>
             <div className="mt-3">
               <ProgressBar current={actuals.totalKaetai} target={targets.sales.kaetai} color="orange" />
             </div>
@@ -496,9 +595,9 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
           <div className="rounded-xl bg-gray-50 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">ストック売上</span>
-              <span className="text-xs text-gray-400">目標: {formatMan(targets.sales.stock)}</span>
+              <span className="text-xs text-gray-400">目標: {formatManYen(targets.sales.stock)}</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-gray-900">{formatMan(actuals.totalStock)}</div>
+            <div className="mt-2 text-2xl font-bold text-gray-900">{formatManYen(actuals.totalStock)}</div>
             <div className="mt-3">
               <ProgressBar current={actuals.totalStock} target={targets.sales.stock} />
             </div>
@@ -507,9 +606,9 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
           <div className="rounded-xl bg-red-50 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-red-600">総コスト</span>
-              <span className="text-xs text-red-400">目標: {formatMan(targets.costs.total)}</span>
+              <span className="text-xs text-red-400">目標: {formatManYen(targets.costs.total)}</span>
             </div>
-            <div className="mt-2 text-2xl font-bold text-red-700">{formatMan(actuals.totalCosts)}</div>
+            <div className="mt-2 text-2xl font-bold text-red-700">{formatManYen(actuals.totalCosts)}</div>
             <div className="mt-3">
               <ProgressBar current={actuals.totalCosts} target={targets.costs.total} color="orange" />
             </div>
@@ -539,8 +638,8 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
             ).map(({ label, target, actual, color }) => (
               <tr key={label} className="border-b border-gray-100">
                 <td className="py-3">{label}</td>
-                <td className="py-3 text-right">{formatMan(target)}</td>
-                <td className="py-3 text-right font-medium">{formatMan(actual)}</td>
+                <td className="py-3 text-right">{formatManYen(target)}</td>
+                <td className="py-3 text-right font-medium">{formatManYen(actual)}</td>
                 <td className={`py-3 text-right font-bold ${color}`}>
                   {target > 0 ? Math.round((actual / target) * 100) : 0}%
                 </td>
@@ -548,8 +647,8 @@ function CompareView({ actuals }: { actuals: ReturnType<typeof calculateActuals>
             ))}
             <tr className="bg-emerald-50">
               <td className="py-3 font-medium">合計</td>
-              <td className="py-3 text-right font-medium">{formatMan(targets.sales.total)}</td>
-              <td className="py-3 text-right font-bold">{formatMan(actuals.totalRevenue)}</td>
+              <td className="py-3 text-right font-medium">{formatManYen(targets.sales.total)}</td>
+              <td className="py-3 text-right font-bold">{formatManYen(actuals.totalRevenue)}</td>
               <td className="py-3 text-right font-bold text-emerald-600">
                 {targets.sales.total > 0 ? Math.round((actuals.totalRevenue / targets.sales.total) * 100) : 0}%
               </td>
