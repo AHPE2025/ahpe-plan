@@ -221,16 +221,13 @@ export default function AhpeSalarySheet() {
 
   const visibleRows = calculatedRows.filter((row) => visibleMonthIds.has(row.id))
 
-  const KAETAI_BASE_AMOUNT = 1500000 // 既存の150万円
-
   const summary = useMemo(() => {
     const totalHonnePersons = calculatedRows.reduce((sum, row) => sum + row.honnePersonCount, 0)
     const totalHonne = totalHonnePersons * 10000 // 1人1万円
     const totalTraining = calculatedRows.reduce((sum, row) => sum + row.trainingAmount, 0)
     const totalKaetai = calculatedRows.reduce((sum, row) => sum + row.kaetaiAmount, 0)
     const totalStock = calculatedRows.reduce((sum, row) => sum + row.stockRevenue, 0)
-    // 総売上にはKAETAIの既存150万円を含める
-    const totalRevenue = totalHonne + totalTraining + totalKaetai + KAETAI_BASE_AMOUNT + totalStock
+    const totalRevenue = totalHonne + totalTraining + totalKaetai + totalStock
     const totalCostsBeforeSalary = calculatedRows.reduce((sum, row) => sum + row.fixedAndOtherCosts, 0)
     const totalProfitBeforeSalary = totalRevenue - totalCostsBeforeSalary
     // 給与は利益の60%（1人20%）
@@ -267,7 +264,7 @@ export default function AhpeSalarySheet() {
             </h1>
             <p className="mt-2 text-sm leading-7 text-gray-600 md:text-base">
               給与は営業利益（給与前）の60%（1人20%）、内部留保は40%で自動計算されます。
-              KAETAIは一括入金でも3分割入金でも、その月に実際に入金された金額を入力してください。
+              KAETAIは100万円・2分割（契約月50万＋翌月50万）の実入金額を入力してください。
             </p>
           </div>
 
@@ -305,8 +302,8 @@ export default function AhpeSalarySheet() {
             <div className="mt-2 text-xl font-bold text-gray-900">{formatYen(summary.totalTraining)}</div>
           </div>
 <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <div className="text-sm text-gray-500">KAETAI入金合計（+150万円込）</div>
-            <div className="mt-2 text-xl font-bold text-gray-900">{formatYen(summary.totalKaetai + 1500000)}</div>
+            <div className="text-sm text-gray-500">KAETAI入金合計</div>
+            <div className="mt-2 text-xl font-bold text-gray-900">{formatYen(summary.totalKaetai)}</div>
           </div>
           <div className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
             <div className="text-sm text-gray-500">ストック売上合計</div>
@@ -320,7 +317,7 @@ export default function AhpeSalarySheet() {
               <h2 className="text-xl font-bold text-gray-900">月次入力・自動計算表</h2>
               <p className="mt-2 text-sm leading-7 text-gray-600">
                 KAETAIは契約額ではなく、その月に実際に入金された金額を入力してください。
-                3分割なら3か月に分けて入力、一括なら1か月にまとめて入力します。
+                2分割入金（契約月50万＋翌月50万）の場合は各月入金額を入力します。
               </p>
             </div>
             <div className="flex gap-2">
