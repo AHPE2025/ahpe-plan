@@ -15,16 +15,16 @@ export const year1Meta = {
 
 /** 1年目 月次入力（円） */
 export const year1Months: MonthlyInput[] = [
-  { month: "2026年6月", honne: 200_000, training: 50_000, kaetaiContracts: 0, cost: 60_000 },
-  { month: "2026年7月", honne: 200_000, training: 50_000, kaetaiContracts: 0, cost: 60_000 },
-  { month: "2026年8月", honne: 200_000, training: 50_000, kaetaiContracts: 0, cost: 160_000 },
-  { month: "2026年9月", honne: 200_000, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
-  { month: "2026年10月", honne: 200_000, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
-  { month: "2026年11月", honne: 400_000, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
-  { month: "2026年12月", honne: 400_000, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
-  { month: "2027年1月", honne: 400_000, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
-  { month: "2027年2月", honne: 400_000, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
-  { month: "2027年3月", honne: 400_000, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
+  { month: "2026年6月", honne: 200_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 0, cost: 60_000 },
+  { month: "2026年7月", honne: 200_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 0, cost: 60_000 },
+  { month: "2026年8月", honne: 200_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 0, cost: 160_000 },
+  { month: "2026年9月", honne: 200_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
+  { month: "2026年10月", honne: 200_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
+  { month: "2026年11月", honne: 400_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
+  { month: "2026年12月", honne: 400_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
+  { month: "2027年1月", honne: 400_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
+  { month: "2027年2月", honne: 400_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
+  { month: "2027年3月", honne: 400_000, honneContractPeople: 20, training: 50_000, kaetaiContracts: 1, cost: 160_000 },
 ]
 
 export const year1Computed: YearCalculationResult = calculateYearPlan(year1Months, {
@@ -40,8 +40,10 @@ export const year1Targets = {
   bonus: 0,
   sales: {
     honne: year1Computed.totals.honne,
+    honneContractPeople: year1Computed.totals.honneContractPeople,
     training: year1Computed.totals.training,
     kaetai: year1Computed.totals.kaetai,
+    kaetaiContracts: year1Computed.totals.kaetaiPeriodCumulative,
     stock: year1Computed.totals.stock,
     total: year1Computed.totals.totalRevenue,
   },

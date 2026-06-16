@@ -3,15 +3,7 @@
 import React, { useMemo, useState } from "react"
 import Navigation from "./navigation"
 import { useData, type MonthRow } from "@/lib/data-context"
-
-// 金額選択肢（10万円単位、0〜1000万円 + 細かい選択肢）
-const amountOptions = [
-  0, 10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000,
-  100000, 150000, 200000, 250000, 300000, 350000, 400000, 450000, 500000,
-  600000, 700000, 800000, 900000, 1000000,
-  1500000, 2000000, 2500000, 3000000, 3500000, 4000000, 4500000, 5000000,
-  6000000, 7000000, 8000000, 9000000, 10000000,
-]
+import { formatNumber, parseNumber } from "@/lib/utils"
 
 // 件数選択肢（0〜10）
 const countOptions = Array.from({ length: 11 }, (_, i) => i)
@@ -28,12 +20,64 @@ const SALARY_RATE_PER_PERSON = 0.2 // 1人あたり20%
 const RESERVE_RATE = 0.4 // 内部留保率40%
 
 function formatYen(value: number) {
-  return `¥${value.toLocaleString("ja-JP")}`
+  return `¥${formatNumber(value)}`
 }
 
-function formatMan(value: number) {
-  const man = value / 10000
-  return man === 0 ? "0円" : `${man}万円`
+// 金額入力コンポーネント（円単位・カンマ区切り表示）
+function AmountInput({
+  value,
+  onChange,
+}: {
+  value: number
+  onChange: (val: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+
+  const startEdit = () => {
+    setDraft(value === 0 ? "" : formatNumber(value))
+    setEditing(true)
+  }
+
+  const commit = () => {
+    const parsed = parseNumber(draft)
+    if (parsed >= 0) onChange(parsed)
+    setEditing(false)
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/,/g, "")
+    if (raw === "" || /^\d+$/.test(raw)) {
+      setDraft(raw === "" ? "" : formatNumber(parseNumber(raw)))
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="text"
+        value={draft}
+        onChange={handleChange}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit()
+          if (e.key === "Escape") setEditing(false)
+        }}
+        className="w-28 rounded-lg border border-blue-400 bg-blue-50 px-2 py-1.5 text-right text-sm focus:outline-none"
+      />
+    )
+  }
+
+  return (
+    <button
+      onClick={startEdit}
+      title="クリックして金額を入力"
+      className="w-28 cursor-pointer rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-right text-sm hover:bg-blue-50 hover:ring-1 hover:ring-blue-300"
+    >
+      {value === 0 ? "0" : formatNumber(value)}
+    </button>
+  )
 }
 
 // 件数選択コンポーネント
@@ -82,7 +126,7 @@ function PersonSelect({
   )
 }
 
-// 金額選択コンポーネント（1万円単位）
+// 金額選択コンポーネント（1万円単位）— 後方互換のため残すが AmountInput を使用
 function AmountSelect({
   value,
   onChange,
@@ -90,19 +134,7 @@ function AmountSelect({
   value: number
   onChange: (val: number) => void
 }) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(parseInt(e.target.value))}
-      className="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
-    >
-      {amountOptions.map((amount) => (
-        <option key={amount} value={amount}>
-          {formatMan(amount)}
-        </option>
-      ))}
-    </select>
-  )
+  return <AmountInput value={value} onChange={onChange} />
 }
 
 
