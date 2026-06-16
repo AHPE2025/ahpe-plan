@@ -142,6 +142,20 @@ export type PlanTableProps = {
   isYear2: boolean
 }
 
+const MONTH_HEADER_CLASS =
+  "sticky left-0 z-40 bg-white min-w-[140px] border-r border-gray-200 shadow-sm border-b pb-3 font-medium"
+
+function monthCellStickyBg(highlight: boolean, index: number): string {
+  if (highlight) return "bg-amber-50"
+  return index % 2 === 0 ? "bg-white" : "bg-gray-50"
+}
+
+const MONTH_CELL_BASE =
+  "sticky left-0 z-30 min-w-[140px] border-r border-gray-100 shadow-sm font-medium text-gray-700"
+
+const MONTH_TOTAL_CLASS =
+  "sticky left-0 z-50 bg-gray-900 text-white min-w-[140px] border-r border-gray-700 font-bold"
+
 export default function PlanTable({ plan, onPlanChange, calcOptions, isYear2 }: PlanTableProps) {
   const updateCell = useCallback(
     (index: number, field: keyof Omit<MonthlyInput, "month" | "octoberBonusTotal">, value: number) => {
@@ -168,7 +182,7 @@ export default function PlanTable({ plan, onPlanChange, calcOptions, isYear2 }: 
         <table className="w-full min-w-[1900px] border-separate border-spacing-0">
           <thead>
             <tr className="text-left text-xs text-gray-500">
-              <th className="border-b border-gray-200 pb-3 font-medium">月</th>
+              <th className={MONTH_HEADER_CLASS}>月</th>
               <th className="border-b border-blue-100 bg-blue-50/60 px-2 pb-3 text-right font-medium text-blue-600">HONNE</th>
               <th className="border-b border-blue-100 bg-blue-50/60 px-2 pb-3 text-right font-medium text-blue-600">HONNE契約人数</th>
               <th className="border-b border-blue-100 bg-blue-50/60 px-2 pb-3 text-right font-medium text-blue-600">AI研修</th>
@@ -198,7 +212,9 @@ export default function PlanTable({ plan, onPlanChange, calcOptions, isYear2 }: 
               return (
                 <React.Fragment key={i}>
                   <tr className={highlight ? "bg-amber-50/40" : i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                    <td className="border-b border-gray-100 py-2.5 pr-3 font-medium text-gray-700">
+                    <td
+                      className={`${MONTH_CELL_BASE} border-b py-2.5 pr-3 ${monthCellStickyBg(highlight, i)}`}
+                    >
                       {row.month}
                       {isOctober && (
                         <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-xs text-amber-700">特別ボーナス</span>
@@ -288,7 +304,7 @@ export default function PlanTable({ plan, onPlanChange, calcOptions, isYear2 }: 
               )
             })}
             <tr className="bg-gray-900 text-white">
-              <td className="px-0 py-3 font-bold">合計</td>
+              <td className={`${MONTH_TOTAL_CLASS} px-0 py-3`}>合計</td>
               <td className="px-2 py-3 text-right font-medium">{formatManYen(computed.totals.honne)}</td>
               <td className="px-2 py-3 text-right font-medium">{computed.totals.honneContractPeople}人</td>
               <td className="px-2 py-3 text-right font-medium">{formatManYen(computed.totals.training)}</td>
