@@ -2,9 +2,12 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
+import { Button } from "@/components/ui/button"
 
 export default function Navigation() {
   const pathname = usePathname()
+  const { user, isEditable, isGuestView, signOut } = useAuth()
 
   const links = [
     { href: "/", label: "月次入力・自動計算表" },
@@ -14,22 +17,39 @@ export default function Navigation() {
   return (
     <nav className="border-b border-gray-200 bg-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-14 items-center gap-8">
-          <div className="text-lg font-bold text-gray-900">AHPE 報酬管理</div>
-          <div className="flex gap-1">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                  pathname === link.href
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+        <div className="flex h-14 items-center justify-between gap-4">
+          <div className="flex items-center gap-8">
+            <div className="text-lg font-bold text-gray-900">AHPE 報酬管理</div>
+            <div className="flex gap-1">
+              {links.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                    pathname === link.href
+                      ? "bg-gray-900 text-white"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {!isEditable && (
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+                {isGuestView ? "閲覧のみ" : "編集不可"}
+              </span>
+            )}
+            {user?.email && (
+              <span className="hidden text-sm text-gray-500 sm:inline">{user.email}</span>
+            )}
+            {user && (
+              <Button variant="outline" size="sm" onClick={() => void signOut()}>
+                ログアウト
+              </Button>
+            )}
           </div>
         </div>
       </div>

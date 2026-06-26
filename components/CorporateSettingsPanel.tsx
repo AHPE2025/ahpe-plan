@@ -12,16 +12,26 @@ import { formatNumber, parseNumber } from "@/lib/utils"
 type CorporateSettingsPanelProps = {
   settings: CorporateSettings
   onChange: (settings: CorporateSettings) => void
+  readOnly?: boolean
 }
 
 function MonthInput({
   value,
   onChange,
+  readOnly = false,
 }: {
   value: string
   onChange: (v: string) => void
+  readOnly?: boolean
 }) {
   const [year, month] = value.split("-")
+  if (readOnly) {
+    return (
+      <span className="text-sm text-gray-700">
+        {year}年{Number(month)}月
+      </span>
+    )
+  }
   return (
     <div className="flex items-center gap-1">
       <input
@@ -50,19 +60,24 @@ function SettingsField({
   field,
   value,
   onChange,
+  readOnly = false,
 }: {
   field: (typeof CORPORATE_SETTINGS_FIELDS)[number]
   value: CorporateSettings[keyof CorporateSettings]
   onChange: (v: CorporateSettings[keyof CorporateSettings]) => void
+  readOnly?: boolean
 }) {
   if (field.type === "month") {
     return (
-      <MonthInput value={String(value)} onChange={(v) => onChange(v)} />
+      <MonthInput readOnly={readOnly} value={String(value)} onChange={(v) => onChange(v)} />
     )
   }
 
   if (field.type === "percent") {
     const display = Math.round(Number(value) * 10000) / 100
+    if (readOnly) {
+      return <span className="text-sm text-gray-700">{display}%</span>
+    }
     return (
       <div className="flex items-center gap-1">
         <input
@@ -79,6 +94,15 @@ function SettingsField({
 
   const isYen = field.type === "yen"
   const numValue = Number(value)
+
+  if (readOnly) {
+    return (
+      <span className="text-sm text-gray-700">
+        {formatNumber(numValue)}
+        {isYen ? "円" : field.type === "number" ? "人" : ""}
+      </span>
+    )
+  }
 
   return (
     <div className="flex items-center gap-1">
@@ -100,6 +124,7 @@ function SettingsField({
 export default function CorporateSettingsPanel({
   settings,
   onChange,
+  readOnly = false,
 }: CorporateSettingsPanelProps) {
   const [open, setOpen] = useState(true)
 
@@ -107,6 +132,7 @@ export default function CorporateSettingsPanel({
     key: K,
     value: CorporateSettings[K]
   ) => {
+    if (readOnly) return
     onChange({ ...settings, [key]: value })
   }
 
@@ -141,6 +167,7 @@ export default function CorporateSettingsPanel({
               <label className="text-sm font-medium text-gray-800">{field.label}</label>
               <div className="mt-2">
                 <SettingsField
+                  readOnly={readOnly}
                   field={field}
                   value={settings[field.key]}
                   onChange={(v) => updateField(field.key, v as CorporateSettings[typeof field.key])}

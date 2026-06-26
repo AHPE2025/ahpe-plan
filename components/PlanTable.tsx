@@ -16,16 +16,19 @@ function EditableCountCell({
   onChange,
   className = "",
   unit = "",
+  readOnly = false,
 }: {
   value: number
   onChange: (v: number) => void
   className?: string
   unit?: string
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
 
   const startEdit = () => {
+    if (readOnly) return
     setDraft(String(value))
     setEditing(true)
   }
@@ -61,6 +64,15 @@ function EditableCountCell({
     )
   }
 
+  if (readOnly) {
+    return (
+      <span className={`px-1 py-0.5 text-right text-sm ${className}`}>
+        {value}
+        {unit && <span className="ml-0.5 text-xs text-gray-400">{unit}</span>}
+      </span>
+    )
+  }
+
   return (
     <button
       onClick={startEdit}
@@ -77,10 +89,12 @@ function EditableCell({
   value,
   onChange,
   className = "",
+  readOnly = false,
 }: {
   value: number
   onChange: (v: number) => void
   className?: string
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
@@ -88,6 +102,7 @@ function EditableCell({
   const toMan = (yen: number) => Math.round(yen / 10000)
 
   const startEdit = () => {
+    if (readOnly) return
     const man = toMan(value)
     setDraft(man === 0 ? "" : formatNumber(man))
     setEditing(true)
@@ -126,6 +141,10 @@ function EditableCell({
     )
   }
 
+  if (readOnly) {
+    return <span className={`px-1 py-0.5 text-right text-sm ${className}`}>{formatManYen(value)}</span>
+  }
+
   return (
     <button
       onClick={startEdit}
@@ -141,12 +160,18 @@ function CostCell({
   value,
   costDetails,
   onClick,
+  readOnly = false,
 }: {
   value: number
   costDetails?: MonthlyInput["costDetails"]
   onClick: () => void
+  readOnly?: boolean
 }) {
   const breakdown = costDetails?.length ? formatCostDetailBreakdown(costDetails) : ""
+
+  if (readOnly) {
+    return <span className="px-1 py-0.5 text-right text-sm text-red-600">{formatManYen(value)}</span>
+  }
 
   return (
     <button
@@ -185,6 +210,7 @@ export type PlanTableProps = {
   isYear2: boolean
   costItemTemplates: CostItemTemplate[]
   onCostItemTemplatesChange: (templates: CostItemTemplate[]) => void
+  readOnly?: boolean
 }
 
 const MONTH_HEADER_CLASS =
@@ -208,6 +234,7 @@ export default function PlanTable({
   isYear2,
   costItemTemplates,
   onCostItemTemplatesChange,
+  readOnly = false,
 }: PlanTableProps) {
   const [costDialogIndex, setCostDialogIndex] = useState<number | null>(null)
 
@@ -331,10 +358,11 @@ export default function PlanTable({
                       )}
                     </td>
                     <td className="border-b border-gray-100 bg-blue-50/30 px-2 py-2.5 text-right">
-                      <EditableCell value={row.honne} onChange={(v) => updateCell(i, "honne", v)} className="text-blue-700" />
+                      <EditableCell readOnly={readOnly} value={row.honne} onChange={(v) => updateCell(i, "honne", v)} className="text-blue-700" />
                     </td>
                     <td className="border-b border-gray-100 bg-blue-50/30 px-2 py-2.5 text-right">
                       <EditableCountCell
+                        readOnly={readOnly}
                         value={row.honneContractPeople}
                         onChange={(v) => updateCell(i, "honneContractPeople", v)}
                         className="text-blue-700"
@@ -342,7 +370,7 @@ export default function PlanTable({
                       />
                     </td>
                     <td className="border-b border-gray-100 bg-blue-50/30 px-2 py-2.5 text-right">
-                      <EditableCell value={row.training} onChange={(v) => updateCell(i, "training", v)} className="text-blue-700" />
+                      <EditableCell readOnly={readOnly} value={row.training} onChange={(v) => updateCell(i, "training", v)} className="text-blue-700" />
                     </td>
                     <td className="border-b border-gray-100 px-2 py-2.5 text-right font-medium text-gray-800">
                       {formatManYen(c.kaetai)}
@@ -352,6 +380,7 @@ export default function PlanTable({
                     </td>
                     <td className="border-b border-gray-100 bg-orange-50/30 px-2 py-2.5 text-right">
                       <EditableCountCell
+                        readOnly={readOnly}
                         value={row.kaetaiContracts}
                         onChange={(v) => updateCell(i, "kaetaiContracts", v)}
                         className="text-orange-700"
@@ -366,9 +395,10 @@ export default function PlanTable({
                     </td>
                     <td className="border-b border-gray-100 bg-red-50/30 px-2 py-2.5 text-right">
                       <CostCell
+                        readOnly={readOnly}
                         value={row.cost}
                         costDetails={row.costDetails}
-                        onClick={() => setCostDialogIndex(i)}
+                        onClick={() => !readOnly && setCostDialogIndex(i)}
                       />
                     </td>
                     <td className="border-b border-gray-100 px-2 py-2.5 text-right font-medium text-gray-800">

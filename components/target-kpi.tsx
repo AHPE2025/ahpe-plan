@@ -12,6 +12,7 @@ import { calculateYearPlan, type YearCalcOptions } from "@/lib/calculate"
 import { DEFAULT_CORPORATE_SETTINGS } from "@/lib/corporate"
 import { formatNumber, parseNumber, formatManYen, formatManDecimalYen } from "@/lib/utils"
 import { useYearPlan } from "@/hooks/use-year-plan"
+import { useAuth } from "@/lib/auth-context"
 
 function formatYen(value: number) {
   return `¥${formatNumber(value)}`
@@ -84,16 +85,19 @@ function HonneContractPeopleTargetCell({
   actual,
   target,
   onTargetChange,
+  readOnly = false,
 }: {
   actual: number
   target: number | null
   onTargetChange: (v: number | null) => void
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const displayValue = target ?? actual
 
   const startEdit = () => {
+    if (readOnly) return
     setDraft(String(displayValue))
     setEditing(true)
   }
@@ -129,6 +133,10 @@ function HonneContractPeopleTargetCell({
     )
   }
 
+  if (readOnly) {
+    return <span className="px-1 py-0.5 text-right text-sm font-medium">{displayValue}人</span>
+  }
+
   return (
     <button
       onClick={startEdit}
@@ -144,6 +152,7 @@ function HonneContractPeopleTargetCell({
 }
 
 function YearView({ isYear2 }: { isYear2: boolean }) {
+  const { isEditable } = useAuth()
   const targets = isYear2 ? year2Targets : year1Targets
   const initialMonths = isYear2 ? year2Months : year1Months
 
@@ -161,6 +170,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
     yearKey: isYear2 ? "year2" : "year1",
     initialMonths,
     initialCorporateSettings: isYear2 ? { ...DEFAULT_CORPORATE_SETTINGS } : undefined,
+    editable: isEditable,
   })
 
   const resolvedCorporateSettings = corporateSettings ?? { ...DEFAULT_CORPORATE_SETTINGS }
@@ -251,6 +261,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         <CorporateSettingsPanel
           settings={resolvedCorporateSettings}
           onChange={setCorporateSettings}
+          readOnly={!isEditable}
         />
       )}
 
@@ -276,6 +287,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
                     actual={honneContractPeopleActual}
                     target={honneContractPeopleTarget}
                     onTargetChange={setHonneContractPeopleTarget}
+                    readOnly={!isEditable}
                   />
                 </td>
               </tr>
@@ -413,13 +425,14 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         isYear2={isYear2}
         costItemTemplates={costItemTemplates}
         onCostItemTemplatesChange={setCostItemTemplates}
+        readOnly={!isEditable}
       />
 
       {saveStatus === "saved" && (
         <p className="text-center text-xs text-gray-400">データを保存しました</p>
       )}
       {saveStatus === "error" && (
-        <p className="text-center text-xs text-red-500">保存に失敗しました</p>
+        <p className="text-center text-xs text-red-500">保存エラー</p>
       )}
 
       {isYear2 && (

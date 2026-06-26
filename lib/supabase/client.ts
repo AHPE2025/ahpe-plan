@@ -1,3 +1,5 @@
+import { getAccessToken } from "@/lib/supabase/session"
+
 export function isSupabaseConfigured(): boolean {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -12,6 +14,12 @@ function getSupabaseConfig() {
   }
 }
 
+function getAuthHeader(): string {
+  const accessToken = getAccessToken()
+  const { anonKey } = getSupabaseConfig()
+  return accessToken ? `Bearer ${accessToken}` : `Bearer ${anonKey}`
+}
+
 export async function supabaseFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -23,7 +31,7 @@ export async function supabaseFetch<T>(
   const { url, anonKey } = getSupabaseConfig()
   const headers: Record<string, string> = {
     apikey: anonKey,
-    Authorization: `Bearer ${anonKey}`,
+    Authorization: getAuthHeader(),
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string> | undefined),
   }

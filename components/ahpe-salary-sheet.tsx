@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react"
 import Navigation from "./navigation"
 import { useData, type MonthRow } from "@/lib/data-context"
+import { useAuth } from "@/lib/auth-context"
 import { formatNumber, parseNumber } from "@/lib/utils"
 
 // 件数選択肢（0〜10）
@@ -27,14 +28,17 @@ function formatYen(value: number) {
 function AmountInput({
   value,
   onChange,
+  readOnly = false,
 }: {
   value: number
   onChange: (val: number) => void
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState("")
 
   const startEdit = () => {
+    if (readOnly) return
     setDraft(value === 0 ? "" : formatNumber(value))
     setEditing(true)
   }
@@ -69,6 +73,14 @@ function AmountInput({
     )
   }
 
+  if (readOnly) {
+    return (
+      <span className="inline-block w-28 px-2 py-1.5 text-right text-sm">
+        {value === 0 ? "0" : formatNumber(value)}
+      </span>
+    )
+  }
+
   return (
     <button
       onClick={startEdit}
@@ -84,10 +96,15 @@ function AmountInput({
 function CountSelect({
   value,
   onChange,
+  readOnly = false,
 }: {
   value: number
   onChange: (val: number) => void
+  readOnly?: boolean
 }) {
+  if (readOnly) {
+    return <span className="inline-block w-16 px-2 py-1.5 text-sm">{value}</span>
+  }
   return (
     <select
       value={value}
@@ -107,10 +124,15 @@ function CountSelect({
 function PersonSelect({
   value,
   onChange,
+  readOnly = false,
 }: {
   value: number
   onChange: (val: number) => void
+  readOnly?: boolean
 }) {
+  if (readOnly) {
+    return <span className="inline-block w-20 px-2 py-1.5 text-sm">{value}人</span>
+  }
   return (
     <select
       value={value}
@@ -130,16 +152,19 @@ function PersonSelect({
 function AmountSelect({
   value,
   onChange,
+  readOnly = false,
 }: {
   value: number
   onChange: (val: number) => void
+  readOnly?: boolean
 }) {
-  return <AmountInput value={value} onChange={onChange} />
+  return <AmountInput value={value} onChange={onChange} readOnly={readOnly} />
 }
 
 
 
 export default function AhpeSalarySheet() {
+  const { isEditable } = useAuth()
   const { rows, setRows, updateRow } = useData()
   const [visibleMonthIds, setVisibleMonthIds] = useState<Set<number>>(
     new Set(rows.map((r) => r.id))
@@ -359,12 +384,14 @@ export default function AhpeSalarySheet() {
               >
                 月を選択 ({visibleMonthIds.size}/{rows.length})
               </button>
-              <button
-                onClick={addMonth}
-                className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-              >
-                + 月を追加
-              </button>
+              {isEditable && (
+                <button
+                  onClick={addMonth}
+                  className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  + 月を追加
+                </button>
+              )}
             </div>
           </div>
 
@@ -430,6 +457,7 @@ export default function AhpeSalarySheet() {
                     {/* HONNE（人数ベース） */}
                     <td className="border-b border-gray-100 bg-blue-50/50 px-3 py-3">
                       <PersonSelect
+                        readOnly={!isEditable}
                         value={row.honnePersonCount}
                         onChange={(val) => updateRow(row.id, "honnePersonCount", val)}
                       />
@@ -444,6 +472,7 @@ export default function AhpeSalarySheet() {
                     {/* AI研修 */}
                     <td className="border-b border-gray-100 bg-green-50/50 px-3 py-3">
                       <CountSelect
+                        readOnly={!isEditable}
                         value={row.trainingContractCount}
                         onChange={(val) => updateRow(row.id, "trainingContractCount", val)}
                       />
@@ -453,12 +482,14 @@ export default function AhpeSalarySheet() {
                     </td>
                     <td className="border-b border-gray-100 bg-green-50/50 px-3 py-3">
                       <CountSelect
+                        readOnly={!isEditable}
                         value={row.trainingActiveCount}
                         onChange={(val) => updateRow(row.id, "trainingActiveCount", val)}
                       />
                     </td>
                     <td className="border-b border-gray-100 bg-green-50/50 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.trainingAmount}
                         onChange={(val) => updateRow(row.id, "trainingAmount", val)}
                       />
@@ -467,6 +498,7 @@ export default function AhpeSalarySheet() {
                     {/* KAETAI */}
                     <td className="border-b border-gray-100 bg-orange-50/50 px-3 py-3">
                       <CountSelect
+                        readOnly={!isEditable}
                         value={row.kaetaiContractCount}
                         onChange={(val) => updateRow(row.id, "kaetaiContractCount", val)}
                       />
@@ -476,6 +508,7 @@ export default function AhpeSalarySheet() {
                     </td>
                     <td className="border-b border-gray-100 bg-orange-50/50 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.kaetaiAmount}
                         onChange={(val) => updateRow(row.id, "kaetaiAmount", val)}
                       />
@@ -484,6 +517,7 @@ export default function AhpeSalarySheet() {
                     {/* ストック */}
                     <td className="border-b border-gray-100 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.stockRevenue}
                         onChange={(val) => updateRow(row.id, "stockRevenue", val)}
                       />
@@ -492,30 +526,35 @@ export default function AhpeSalarySheet() {
                     {/* 経費 */}
                     <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.aiCost}
                         onChange={(val) => updateRow(row.id, "aiCost", val)}
                       />
                     </td>
                     <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.travelCost}
                         onChange={(val) => updateRow(row.id, "travelCost", val)}
                       />
                     </td>
                     <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.foodCost}
                         onChange={(val) => updateRow(row.id, "foodCost", val)}
                       />
                     </td>
                     <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.personnelCostOther}
                         onChange={(val) => updateRow(row.id, "personnelCostOther", val)}
                       />
                     </td>
                     <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
                       <AmountSelect
+                        readOnly={!isEditable}
                         value={row.miscCost}
                         onChange={(val) => updateRow(row.id, "miscCost", val)}
                       />
