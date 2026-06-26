@@ -28,3 +28,8 @@ export function formatManDecimalYen(value: number) {
   const [intPart, decPart] = String(man).split(".")
   return decPart ? `${formatNumber(intPart)}.${decPart}万円` : `${formatNumber(intPart)}万円`
 }
+
+/** 円単位の金額をカンマ区切り円表示に変換 */
+export function formatYen(value: number) {
+  return `${formatNumber(value)}円`
+}

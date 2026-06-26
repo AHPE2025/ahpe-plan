@@ -1,3 +1,10 @@
+import {
+  enrichRowsWithCorporate,
+  isOfficerSalaryMonth,
+  type CalculatedMonthRowWithCorporate,
+  type CorporateSettings,
+} from "./corporate"
+
 /** KAETAI: 1社100万円・2分割（契約月50万 + 翌月50万） */
 export const KAETAI_CONTRACT_AMOUNT = 1_000_000
 export const KAETAI_PAYMENT_PER_INSTALLMENT = 500_000
@@ -60,7 +67,7 @@ export type MarchBonusBreakdown = {
 }
 
 export type YearCalculationResult = {
-  rows: CalculatedMonthRow[]
+  rows: CalculatedMonthRowWithCorporate[]
   totals: {
     honne: number
     honneContractPeople: number
@@ -76,6 +83,14 @@ export type YearCalculationResult = {
     salaryPerPerson: number
     salaryTotal3: number
     internalReserve: number
+    corporateAdditionalCostTotal: number
+    revisedCostTotal: number
+    totalExpense: number
+    profitBeforeTax: number
+    estimatedTax: number
+    profitAfterTax: number
+    reserveAfterTaxCumulative: number
+    plannedStockInvestment: number
   }
   reserveBeforeMarchBonus: number
   marchBonus: MarchBonusBreakdown | null
@@ -94,6 +109,8 @@ export type YearCalcOptions = {
   priorMonthContracts?: number
   isYear2: boolean
   octoberBonusPerPerson?: number
+  /** 法人化後コスト設定（2年目計画で使用） */
+  corporateSettings?: CorporateSettings | null
 }
 
 /** ストック = 1万 + (会社累計契約数 - 1) × 3万（0社の場合は0） */
@@ -118,10 +135,17 @@ export function calculateKaetaiRevenue(
 export function getSalaryPerPerson(
   profitBeforeSalary: number,
   monthIndex: number,
-  isYear2: boolean
+  isYear2: boolean,
+  month?: string,
+  corporateSettings?: CorporateSettings | null
 ): number {
-  if (isYear2 && monthIndex >= SALARY_FIXED_FROM_MONTH_INDEX) {
-    return SALARY_FIXED_AMOUNT
+  if (isYear2) {
+    if (corporateSettings && month && isOfficerSalaryMonth(month, corporateSettings)) {
+      return corporateSettings.officerMonthlySalary
+    }
+    if (monthIndex >= SALARY_FIXED_FROM_MONTH_INDEX) {
+      return SALARY_FIXED_AMOUNT
+    }
   }
   return Math.max(0, Math.round(profitBeforeSalary * SALARY_RATE_PER_PERSON))
 }
@@ -162,6 +186,7 @@ export function calculateYearPlan(
     priorMonthContracts = 0,
     isYear2,
     octoberBonusPerPerson = 0,
+    corporateSettings = null,
   } = options
 
   let kaetaiPeriodCumulative = 0
@@ -183,7 +208,13 @@ export function calculateYearPlan(
     const stock = calculateStock(companyCumulative)
     const totalRevenue = input.honne + input.training + kaetai + stock
     const profitBeforeSalary = totalRevenue - input.cost
-    const salaryPerPerson = getSalaryPerPerson(profitBeforeSalary, monthIndex, isYear2)
+    const salaryPerPerson = getSalaryPerPerson(
+      profitBeforeSalary,
+      monthIndex,
+      isYear2,
+      input.month,
+      corporateSettings
+    )
     salaryCumulativePerPerson += salaryPerPerson
 
     const octoberBonusTotal = input.octoberBonusTotal ?? 0
@@ -258,25 +289,44 @@ export function calculateYearPlan(
   const bonusPersonalTotal =
     isYear2 && marchBonus ? octoberBonusTotal + marchBonus.personalTotal : 0
 
+  const enrichedRows = enrichRowsWithCorporate(rows, isYear2 ? corporateSettings : null)
+
   const totals = {
-    honne: rows.reduce((s, r) => s + r.honne, 0),
-    honneContractPeople: rows.reduce((s, r) => s + r.honneContractPeople, 0),
-    training: rows.reduce((s, r) => s + r.training, 0),
-    kaetai: rows.reduce((s, r) => s + r.kaetai, 0),
+    honne: enrichedRows.reduce((s, r) => s + r.honne, 0),
+    honneContractPeople: enrichedRows.reduce((s, r) => s + r.honneContractPeople, 0),
+    training: enrichedRows.reduce((s, r) => s + r.training, 0),
+    kaetai: enrichedRows.reduce((s, r) => s + r.kaetai, 0),
     kaetaiPeriodCumulative,
     companyCumulativeContracts: companyCumulative,
-    stock: rows.reduce((s, r) => s + r.stock, 0),
-    cost: rows.reduce((s, r) => s + r.cost, 0),
-    totalRevenue: rows.reduce((s, r) => s + r.totalRevenue, 0),
-    profitBeforeSalary: rows.reduce((s, r) => s + r.profitBeforeSalary, 0),
+    stock: enrichedRows.reduce((s, r) => s + r.stock, 0),
+    cost: enrichedRows.reduce((s, r) => s + r.cost, 0),
+    totalRevenue: enrichedRows.reduce((s, r) => s + r.totalRevenue, 0),
+    profitBeforeSalary: enrichedRows.reduce((s, r) => s + r.profitBeforeSalary, 0),
     bonusPersonal: bonusPersonalTotal,
-    salaryPerPerson: rows.reduce((s, r) => s + r.salaryPerPerson, 0),
-    salaryTotal3: rows.reduce((s, r) => s + r.salaryPerPerson * 3, 0),
-    internalReserve: rows.reduce((s, r) => s + r.internalReserve, 0),
+    salaryPerPerson: enrichedRows.reduce((s, r) => s + r.salaryPerPerson, 0),
+    salaryTotal3: enrichedRows.reduce((s, r) => s + r.salaryPerPerson * 3, 0),
+    internalReserve: enrichedRows.reduce((s, r) => s + r.internalReserve, 0),
+    corporateAdditionalCostTotal: enrichedRows.reduce(
+      (s, r) => s + r.corporateAdditionalCostTotal,
+      0
+    ),
+    revisedCostTotal: enrichedRows.reduce((s, r) => s + r.revisedCostTotal, 0),
+    totalExpense: enrichedRows.reduce((s, r) => s + r.totalExpense, 0),
+    profitBeforeTax: enrichedRows.reduce((s, r) => s + r.profitBeforeTax, 0),
+    estimatedTax: enrichedRows.reduce((s, r) => s + r.estimatedTax, 0),
+    profitAfterTax: enrichedRows.reduce((s, r) => s + r.profitAfterTax, 0),
+    reserveAfterTaxCumulative:
+      enrichedRows.length > 0
+        ? enrichedRows[enrichedRows.length - 1].reserveAfterTaxCumulative
+        : 0,
+    plannedStockInvestment:
+      enrichedRows.length > 0
+        ? enrichedRows[enrichedRows.length - 1].plannedStockInvestment
+        : 0,
   }
 
   return {
-    rows,
+    rows: enrichedRows,
     totals,
     reserveBeforeMarchBonus: marchBonus?.reserveBeforeBonus ?? 0,
     marchBonus,

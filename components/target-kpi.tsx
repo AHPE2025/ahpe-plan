@@ -3,10 +3,13 @@
 import React, { useState, useMemo, useCallback } from "react"
 import Navigation from "./navigation"
 import PlanTable from "./PlanTable"
+import CorporateSettingsPanel from "./CorporateSettingsPanel"
+import CorporateDetailTable from "./CorporateDetailTable"
 import { useData, calculateActuals } from "@/lib/data-context"
 import { year1Targets, year1Meta, year1Months } from "@/data/year1"
 import { year2Targets, year2Meta, year2Months } from "@/data/year2"
 import { calculateYearPlan, type MonthlyInput, type YearCalcOptions } from "@/lib/calculate"
+import { DEFAULT_CORPORATE_SETTINGS, type CorporateSettings } from "@/lib/corporate"
 import { formatNumber, parseNumber, formatManYen, formatManDecimalYen } from "@/lib/utils"
 
 function formatYen(value: number) {
@@ -142,6 +145,10 @@ function HonneContractPeopleTargetCell({
 function YearView({ isYear2 }: { isYear2: boolean }) {
   const targets = isYear2 ? year2Targets : year1Targets
   const initialMonths = isYear2 ? year2Months : year1Months
+  const [corporateSettings, setCorporateSettings] = useState<CorporateSettings>(
+    () => ({ ...DEFAULT_CORPORATE_SETTINGS })
+  )
+
   const calcOptions: YearCalcOptions = isYear2
     ? {
         priorCompanyContracts: year2Meta.priorCompanyContracts,
@@ -149,6 +156,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         priorMonthContracts: year2Meta.priorMonthContracts,
         isYear2: true,
         octoberBonusPerPerson: year2Meta.octoberBonusPerPerson,
+        corporateSettings,
       }
     : {
         priorCompanyContracts: year1Meta.priorCompanyContracts,
@@ -186,7 +194,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className={`grid grid-cols-2 gap-4 ${isYear2 ? "md:grid-cols-4 lg:grid-cols-4" : "md:grid-cols-3 lg:grid-cols-6"}`}>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">総売上</div>
           <div className="mt-1 text-lg font-bold text-gray-900">{formatManYen(computed.totals.totalRevenue)}</div>
@@ -209,10 +217,33 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
           <div className="mt-1 text-lg font-bold text-blue-600">{formatManDecimalYen(computed.totals.salaryTotal3)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
-          <div className="text-xs text-gray-500">会社最終内部留保</div>
+          <div className="text-xs text-gray-500">会社最終内部留保（税引前）</div>
           <div className="mt-1 text-lg font-bold text-emerald-600">{formatManDecimalYen(computed.totals.internalReserve)}</div>
         </div>
+        {isYear2 && (
+          <>
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
+              <div className="text-xs text-gray-500">法人化後追加コスト</div>
+              <div className="mt-1 text-lg font-bold text-violet-600">
+                {formatManDecimalYen(computed.totals.corporateAdditionalCostTotal)}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
+              <div className="text-xs text-gray-500">税引後内部留保累計</div>
+              <div className="mt-1 text-lg font-bold text-emerald-600">
+                {formatManDecimalYen(computed.totals.reserveAfterTaxCumulative)}
+              </div>
+            </div>
+          </>
+        )}
       </div>
+
+      {isYear2 && (
+        <CorporateSettingsPanel
+          settings={corporateSettings}
+          onChange={setCorporateSettings}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
@@ -372,6 +403,10 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         calcOptions={calcOptions}
         isYear2={isYear2}
       />
+
+      {isYear2 && (
+        <CorporateDetailTable rows={computed.rows} settings={corporateSettings} />
+      )}
 
       <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
         <h3 className="text-lg font-bold text-gray-900">重要KPI</h3>
