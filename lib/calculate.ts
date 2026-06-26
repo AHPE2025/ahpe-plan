@@ -4,6 +4,7 @@ import {
   type CalculatedMonthRowWithCorporate,
   type CorporateSettings,
 } from "./corporate"
+import type { CostDetail } from "./cost-details"
 
 /** KAETAI: 1社100万円・2分割（契約月50万 + 翌月50万） */
 export const KAETAI_CONTRACT_AMOUNT = 1_000_000
@@ -29,6 +30,8 @@ export type MonthlyInput = {
   training: number
   kaetaiContracts: number
   cost: number
+  /** 費用内訳（amount は万円単位） */
+  costDetails?: CostDetail[]
   /** 10月特別ボーナス（3人合計） */
   octoberBonusTotal?: number
 }

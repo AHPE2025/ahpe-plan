@@ -8,6 +8,8 @@ import {
   type YearCalcOptions,
 } from "@/lib/calculate"
 import { formatNumber, parseNumber, formatManYen, formatManDecimalYen } from "@/lib/utils"
+import CostDetailDialog from "@/components/CostDetailDialog"
+import { formatCostDetailBreakdown, type CostItemTemplate } from "@/lib/cost-details"
 
 function EditableCountCell({
   value,
@@ -135,6 +137,28 @@ function EditableCell({
   )
 }
 
+function CostCell({
+  value,
+  costDetails,
+  onClick,
+}: {
+  value: number
+  costDetails?: MonthlyInput["costDetails"]
+  onClick: () => void
+}) {
+  const breakdown = costDetails?.length ? formatCostDetailBreakdown(costDetails) : ""
+
+  return (
+    <button
+      onClick={onClick}
+      title={breakdown || "クリックして費用詳細を編集"}
+      className="cursor-pointer rounded px-1 py-0.5 text-right text-sm text-red-600 hover:bg-red-50 hover:ring-1 hover:ring-red-300"
+    >
+      {formatManYen(value)}
+    </button>
+  )
+}
+
 function ReadOnlyCell({
   value,
   className = "",
@@ -159,6 +183,8 @@ export type PlanTableProps = {
   onPlanChange: (plan: MonthlyInput[]) => void
   calcOptions: YearCalcOptions
   isYear2: boolean
+  costItemTemplates: CostItemTemplate[]
+  onCostItemTemplatesChange: (templates: CostItemTemplate[]) => void
 }
 
 const MONTH_HEADER_CLASS =
@@ -175,12 +201,29 @@ const MONTH_CELL_BASE =
 const MONTH_TOTAL_CLASS =
   "sticky left-0 z-50 bg-gray-900 text-white min-w-[140px] border-r border-gray-700 font-bold"
 
-export default function PlanTable({ plan, onPlanChange, calcOptions, isYear2 }: PlanTableProps) {
+export default function PlanTable({
+  plan,
+  onPlanChange,
+  calcOptions,
+  isYear2,
+  costItemTemplates,
+  onCostItemTemplatesChange,
+}: PlanTableProps) {
+  const [costDialogIndex, setCostDialogIndex] = useState<number | null>(null)
+
   const updateCell = useCallback(
     (index: number, field: keyof Omit<MonthlyInput, "month" | "octoberBonusTotal">, value: number) => {
       onPlanChange(plan.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
     },
     [plan, onPlanChange]
+  )
+
+  const handleCostSave = useCallback(
+    (newPlan: MonthlyInput[], templates: CostItemTemplate[]) => {
+      onPlanChange(newPlan)
+      onCostItemTemplatesChange(templates)
+    },
+    [onPlanChange, onCostItemTemplatesChange]
   )
 
   const computed: YearCalculationResult = useMemo(
@@ -322,7 +365,11 @@ export default function PlanTable({ plan, onPlanChange, calcOptions, isYear2 }: 
                       {c.companyCumulativeContracts}社
                     </td>
                     <td className="border-b border-gray-100 bg-red-50/30 px-2 py-2.5 text-right">
-                      <EditableCell value={row.cost} onChange={(v) => updateCell(i, "cost", v)} className="text-red-600" />
+                      <CostCell
+                        value={row.cost}
+                        costDetails={row.costDetails}
+                        onClick={() => setCostDialogIndex(i)}
+                      />
                     </td>
                     <td className="border-b border-gray-100 px-2 py-2.5 text-right font-medium text-gray-800">
                       {formatManYen(c.totalRevenue)}
@@ -492,6 +539,18 @@ export default function PlanTable({ plan, onPlanChange, calcOptions, isYear2 }: 
           </tbody>
         </table>
       </div>
+
+      {costDialogIndex !== null && (
+        <CostDetailDialog
+          open={costDialogIndex !== null}
+          onOpenChange={(open) => !open && setCostDialogIndex(null)}
+          monthLabel={plan[costDialogIndex]?.month ?? ""}
+          monthIndex={costDialogIndex}
+          plan={plan}
+          onSave={handleCostSave}
+          costItemTemplates={costItemTemplates}
+        />
+      )}
     </div>
   )
 }

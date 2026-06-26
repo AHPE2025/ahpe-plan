@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useCallback } from "react"
+import React, { useState, useMemo } from "react"
 import Navigation from "./navigation"
 import PlanTable from "./PlanTable"
 import CorporateSettingsPanel from "./CorporateSettingsPanel"
@@ -8,9 +8,10 @@ import CorporateDetailTable from "./CorporateDetailTable"
 import { useData, calculateActuals } from "@/lib/data-context"
 import { year1Targets, year1Meta, year1Months } from "@/data/year1"
 import { year2Targets, year2Meta, year2Months } from "@/data/year2"
-import { calculateYearPlan, type MonthlyInput, type YearCalcOptions } from "@/lib/calculate"
-import { DEFAULT_CORPORATE_SETTINGS, type CorporateSettings } from "@/lib/corporate"
+import { calculateYearPlan, type YearCalcOptions } from "@/lib/calculate"
+import { DEFAULT_CORPORATE_SETTINGS } from "@/lib/corporate"
 import { formatNumber, parseNumber, formatManYen, formatManDecimalYen } from "@/lib/utils"
+import { useYearPlan } from "@/hooks/use-year-plan"
 
 function formatYen(value: number) {
   return `¥${formatNumber(value)}`
@@ -145,9 +146,24 @@ function HonneContractPeopleTargetCell({
 function YearView({ isYear2 }: { isYear2: boolean }) {
   const targets = isYear2 ? year2Targets : year1Targets
   const initialMonths = isYear2 ? year2Months : year1Months
-  const [corporateSettings, setCorporateSettings] = useState<CorporateSettings>(
-    () => ({ ...DEFAULT_CORPORATE_SETTINGS })
-  )
+
+  const {
+    plan,
+    handlePlanChange,
+    costItemTemplates,
+    setCostItemTemplates,
+    corporateSettings,
+    setCorporateSettings,
+    honneContractPeopleTarget,
+    setHonneContractPeopleTarget,
+    saveStatus,
+  } = useYearPlan({
+    yearKey: isYear2 ? "year2" : "year1",
+    initialMonths,
+    initialCorporateSettings: isYear2 ? { ...DEFAULT_CORPORATE_SETTINGS } : undefined,
+  })
+
+  const resolvedCorporateSettings = corporateSettings ?? { ...DEFAULT_CORPORATE_SETTINGS }
 
   const calcOptions: YearCalcOptions = isYear2
     ? {
@@ -156,7 +172,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         priorMonthContracts: year2Meta.priorMonthContracts,
         isYear2: true,
         octoberBonusPerPerson: year2Meta.octoberBonusPerPerson,
-        corporateSettings,
+        corporateSettings: resolvedCorporateSettings,
       }
     : {
         priorCompanyContracts: year1Meta.priorCompanyContracts,
@@ -164,15 +180,8 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         isYear2: false,
       }
 
-  const [plan, setPlan] = useState<MonthlyInput[]>(() => initialMonths.map((m) => ({ ...m })))
-  const [honneContractPeopleTarget, setHonneContractPeopleTarget] = useState<number | null>(null)
-
   const computed = useMemo(() => calculateYearPlan(plan, calcOptions), [plan, calcOptions])
   const honneContractPeopleActual = computed.totals.honneContractPeople
-
-  const handlePlanChange = useCallback((newPlan: MonthlyInput[]) => {
-    setPlan(newPlan)
-  }, [])
 
   const [bonusOpen, setBonusOpen] = useState(false)
   const marchBonus = isYear2 ? year2Targets.bonus.march : null
@@ -240,7 +249,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
 
       {isYear2 && (
         <CorporateSettingsPanel
-          settings={corporateSettings}
+          settings={resolvedCorporateSettings}
           onChange={setCorporateSettings}
         />
       )}
@@ -402,10 +411,19 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         onPlanChange={handlePlanChange}
         calcOptions={calcOptions}
         isYear2={isYear2}
+        costItemTemplates={costItemTemplates}
+        onCostItemTemplatesChange={setCostItemTemplates}
       />
 
+      {saveStatus === "saved" && (
+        <p className="text-center text-xs text-gray-400">データを保存しました</p>
+      )}
+      {saveStatus === "error" && (
+        <p className="text-center text-xs text-red-500">保存に失敗しました</p>
+      )}
+
       {isYear2 && (
-        <CorporateDetailTable rows={computed.rows} settings={corporateSettings} />
+        <CorporateDetailTable rows={computed.rows} settings={resolvedCorporateSettings} />
       )}
 
       <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200">
