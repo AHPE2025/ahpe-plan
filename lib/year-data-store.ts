@@ -5,24 +5,21 @@ import { isSupabaseConfigured, supabaseFetch } from "@/lib/supabase/client"
 
 export type YearKey = "year1" | "year2"
 
-/** Supabase / localStorage の year_data に保存するペイロード（法人設定は含めない） */
+/** Supabase ahpe_plan_data.data に保存するペイロード */
 export type YearStoredData = {
   plan: MonthlyInput[]
-  costItemTemplates: CostItemTemplate[]
   honneContractPeopleTarget?: number | null
 }
 
-/** 旧データ互換用（corporateSettings は Supabase へ保存しない） */
+/** 旧データ互換用 */
 type LegacyYearStoredData = YearStoredData & {
+  costItemTemplates?: CostItemTemplate[]
   corporateSettings?: CorporateSettings
 }
 
-function stripLegacyCorporateSettings(data: LegacyYearStoredData): {
-  payload: YearStoredData
+export type LoadedYearData = YearStoredData & {
+  legacyCostItemTemplates?: CostItemTemplate[]
   legacyCorporateSettings?: CorporateSettings
-} {
-  const { corporateSettings, ...payload } = data
-  return { payload, legacyCorporateSettings: corporateSettings }
 }
 
 const LOCAL_STORAGE_PREFIX = "ahpe-year-data-"
@@ -31,8 +28,13 @@ function localStorageKey(yearKey: YearKey): string {
   return `${LOCAL_STORAGE_PREFIX}${yearKey}`
 }
 
-export type LoadedYearData = YearStoredData & {
-  legacyCorporateSettings?: CorporateSettings
+function stripLegacyFields(data: LegacyYearStoredData): LoadedYearData {
+  const { costItemTemplates, corporateSettings, ...payload } = data
+  return {
+    ...payload,
+    legacyCostItemTemplates: costItemTemplates,
+    legacyCorporateSettings: corporateSettings,
+  }
 }
 
 function readLocalStorage(yearKey: YearKey): LoadedYearData | null {
@@ -41,8 +43,7 @@ function readLocalStorage(yearKey: YearKey): LoadedYearData | null {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as LegacyYearStoredData
-    const { payload, legacyCorporateSettings } = stripLegacyCorporateSettings(parsed)
-    return { ...payload, legacyCorporateSettings }
+    return stripLegacyFields(parsed)
   } catch (e) {
     console.error("[loadYearData] localStorage parse error:", e)
     return null
@@ -58,16 +59,19 @@ export async function loadYearData(yearKey: YearKey): Promise<LoadedYearData | n
   if (isSupabaseConfigured()) {
     try {
       const { data, error } = await supabaseFetch<Array<{ data: LegacyYearStoredData }>>(
-        `year_data?year_key=eq.${yearKey}&select=data`,
+        `ahpe_plan_data?year_key=eq.${yearKey}&select=data`,
         { method: "GET" }
       )
 
       if (error) {
         console.error(`[loadYearData] Supabase load failed (${yearKey}):`, error)
       } else if (data?.[0]?.data) {
-        const { payload, legacyCorporateSettings } = stripLegacyCorporateSettings(data[0].data)
-        writeLocalStorage(yearKey, payload)
-        return { ...payload, legacyCorporateSettings }
+        const loaded = stripLegacyFields(data[0].data)
+        writeLocalStorage(yearKey, {
+          plan: loaded.plan,
+          honneContractPeopleTarget: loaded.honneContractPeopleTarget,
+        })
+        return loaded
       } else {
         return null
       }
@@ -87,7 +91,7 @@ export async function saveYearData(
 ): Promise<{ ok: boolean; via: "supabase" | "localStorage" | "none"; error?: string }> {
   if (isSupabaseConfigured()) {
     try {
-      const { error } = await supabaseFetch<unknown>("year_data?on_conflict=year_key", {
+      const { error } = await supabaseFetch<unknown>("ahpe_plan_data?on_conflict=year_key", {
         method: "POST",
         headers: {
           Prefer: "resolution=merge-duplicates",

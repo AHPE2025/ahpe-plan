@@ -10,7 +10,7 @@ import {
   saveCorporateSettings,
 } from "@/lib/corporate-settings-store"
 import { normalizePlan } from "@/lib/cost-details"
-import type { CostItemTemplate } from "@/lib/cost-details"
+import { migrateLegacyCostItemTemplates } from "@/lib/plan-settings-store"
 import {
   loadYearData,
   saveYearData,
@@ -34,7 +34,6 @@ export function useYearPlan({
   const [plan, setPlan] = useState<MonthlyInput[]>(() =>
     normalizePlan(initialMonths.map((m) => ({ ...m })))
   )
-  const [costItemTemplates, setCostItemTemplates] = useState<CostItemTemplate[]>([])
   const [corporateSettings, setCorporateSettings] = useState<CorporateSettings>(
     () => initialCorporateSettings ?? { ...DEFAULT_CORPORATE_SETTINGS }
   )
@@ -55,11 +54,12 @@ export function useYearPlan({
 
       if (stored?.plan?.length) {
         setPlan(normalizePlan(stored.plan))
-        setCostItemTemplates(stored.costItemTemplates ?? [])
         if (stored.honneContractPeopleTarget !== undefined) {
           setHonneContractPeopleTarget(stored.honneContractPeopleTarget)
         }
       }
+
+      await migrateLegacyCostItemTemplates(stored?.legacyCostItemTemplates)
 
       if (yearKey === "year2") {
         migrateCorporateSettingsFromYearData(stored?.legacyCorporateSettings)
@@ -93,7 +93,6 @@ export function useYearPlan({
     saveTimerRef.current = setTimeout(() => {
       persist({
         plan,
-        costItemTemplates,
         honneContractPeopleTarget,
       })
     }, 800)
@@ -101,7 +100,7 @@ export function useYearPlan({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [plan, costItemTemplates, honneContractPeopleTarget, loaded, persist, editable])
+  }, [plan, honneContractPeopleTarget, loaded, persist, editable])
 
   useEffect(() => {
     if (!loaded || yearKey !== "year2" || !editable) return
@@ -121,8 +120,6 @@ export function useYearPlan({
     plan,
     setPlan,
     handlePlanChange,
-    costItemTemplates,
-    setCostItemTemplates,
     corporateSettings,
     setCorporateSettings,
     honneContractPeopleTarget,

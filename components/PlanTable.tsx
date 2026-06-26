@@ -8,8 +8,7 @@ import {
   type YearCalcOptions,
 } from "@/lib/calculate"
 import { formatNumber, parseNumber, formatManYen, formatManDecimalYen } from "@/lib/utils"
-import CostDetailDialog from "@/components/CostDetailDialog"
-import { formatCostDetailBreakdown, type CostItemTemplate } from "@/lib/cost-details"
+import { formatCostDetailBreakdown } from "@/lib/cost-details"
 
 function EditableCountCell({
   value,
@@ -159,28 +158,19 @@ function EditableCell({
 function CostCell({
   value,
   costDetails,
-  onClick,
-  readOnly = false,
 }: {
   value: number
   costDetails?: MonthlyInput["costDetails"]
-  onClick: () => void
-  readOnly?: boolean
 }) {
   const breakdown = costDetails?.length ? formatCostDetailBreakdown(costDetails) : ""
 
-  if (readOnly) {
-    return <span className="px-1 py-0.5 text-right text-sm text-red-600">{formatManYen(value)}</span>
-  }
-
   return (
-    <button
-      onClick={onClick}
-      title={breakdown || "クリックして費用詳細を編集"}
-      className="cursor-pointer rounded px-1 py-0.5 text-right text-sm text-red-600 hover:bg-red-50 hover:ring-1 hover:ring-red-300"
+    <span
+      title={breakdown || "目標コスト（実績の費用詳細は月次入力シートで編集）"}
+      className="px-1 py-0.5 text-right text-sm text-red-600"
     >
       {formatManYen(value)}
-    </button>
+    </span>
   )
 }
 
@@ -208,8 +198,6 @@ export type PlanTableProps = {
   onPlanChange: (plan: MonthlyInput[]) => void
   calcOptions: YearCalcOptions
   isYear2: boolean
-  costItemTemplates: CostItemTemplate[]
-  onCostItemTemplatesChange: (templates: CostItemTemplate[]) => void
   readOnly?: boolean
 }
 
@@ -232,25 +220,13 @@ export default function PlanTable({
   onPlanChange,
   calcOptions,
   isYear2,
-  costItemTemplates,
-  onCostItemTemplatesChange,
   readOnly = false,
 }: PlanTableProps) {
-  const [costDialogIndex, setCostDialogIndex] = useState<number | null>(null)
-
   const updateCell = useCallback(
     (index: number, field: keyof Omit<MonthlyInput, "month" | "octoberBonusTotal">, value: number) => {
       onPlanChange(plan.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
     },
     [plan, onPlanChange]
-  )
-
-  const handleCostSave = useCallback(
-    (newPlan: MonthlyInput[], templates: CostItemTemplate[]) => {
-      onPlanChange(newPlan)
-      onCostItemTemplatesChange(templates)
-    },
-    [onPlanChange, onCostItemTemplatesChange]
   )
 
   const computed: YearCalculationResult = useMemo(
@@ -341,7 +317,7 @@ export default function PlanTable({
               const c = computed.rows[i]
               const isOctober = isYear2 && (row.octoberBonusTotal ?? 0) > 0
               const isMarch = isYear2 && i === lastIndex && c.marchBonusBreakdown
-              const highlight = isOctober || isMarch
+              const highlight = isOctober || !!isMarch
 
               return (
                 <React.Fragment key={i}>
@@ -394,12 +370,7 @@ export default function PlanTable({
                       {c.companyCumulativeContracts}社
                     </td>
                     <td className="border-b border-gray-100 bg-red-50/30 px-2 py-2.5 text-right">
-                      <CostCell
-                        readOnly={readOnly}
-                        value={row.cost}
-                        costDetails={row.costDetails}
-                        onClick={() => !readOnly && setCostDialogIndex(i)}
-                      />
+                      <CostCell value={row.cost} costDetails={row.costDetails} />
                     </td>
                     <td className="border-b border-gray-100 px-2 py-2.5 text-right font-medium text-gray-800">
                       {formatManYen(c.totalRevenue)}
@@ -569,18 +540,6 @@ export default function PlanTable({
           </tbody>
         </table>
       </div>
-
-      {costDialogIndex !== null && (
-        <CostDetailDialog
-          open={costDialogIndex !== null}
-          onOpenChange={(open) => !open && setCostDialogIndex(null)}
-          monthLabel={plan[costDialogIndex]?.month ?? ""}
-          monthIndex={costDialogIndex}
-          plan={plan}
-          onSave={handleCostSave}
-          costItemTemplates={costItemTemplates}
-        />
-      )}
     </div>
   )
 }

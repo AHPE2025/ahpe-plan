@@ -5,7 +5,8 @@ import Navigation from "./navigation"
 import PlanTable from "./PlanTable"
 import CorporateSettingsPanel from "./CorporateSettingsPanel"
 import CorporateDetailTable from "./CorporateDetailTable"
-import { useData, calculateActuals } from "@/lib/data-context"
+import { calculateActuals } from "@/lib/data-context"
+import { useActualData } from "@/hooks/use-actual-data"
 import { year1Targets, year1Meta, year1Months } from "@/data/year1"
 import { year2Targets, year2Meta, year2Months } from "@/data/year2"
 import { calculateYearPlan, type YearCalcOptions } from "@/lib/calculate"
@@ -33,8 +34,8 @@ function ProgressBar({ current, target, color = "emerald" }: { current: number; 
 
 export default function TargetKPI() {
   const [activeTab, setActiveTab] = useState<"year1" | "year2" | "compare">("year1")
-  const { rows } = useData()
-  const actuals = useMemo(() => calculateActuals(rows), [rows])
+  const { rows: year1ActualRows } = useActualData({ yearKey: "year1", editable: false })
+  const actuals = useMemo(() => calculateActuals(year1ActualRows), [year1ActualRows])
   const isYear2 = activeTab === "year2"
 
   return (
@@ -159,8 +160,6 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
   const {
     plan,
     handlePlanChange,
-    costItemTemplates,
-    setCostItemTemplates,
     corporateSettings,
     setCorporateSettings,
     honneContractPeopleTarget,
@@ -193,6 +192,10 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
   const computed = useMemo(() => calculateYearPlan(plan, calcOptions), [plan, calcOptions])
   const honneContractPeopleActual = computed.totals.honneContractPeople
 
+  const actualYearKey = isYear2 ? "year2" : "year1"
+  const { rows: actualRows } = useActualData({ yearKey: actualYearKey, editable: false })
+  const actualTotals = useMemo(() => calculateActuals(actualRows), [actualRows])
+
   const [bonusOpen, setBonusOpen] = useState(false)
   const marchBonus = isYear2 ? year2Targets.bonus.march : null
 
@@ -219,12 +222,14 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
           <div className="mt-1 text-lg font-bold text-gray-900">{formatManYen(computed.totals.totalRevenue)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
-          <div className="text-xs text-gray-500">コスト</div>
-          <div className="mt-1 text-lg font-bold text-red-600">{formatManYen(computed.totals.cost)}</div>
+          <div className="text-xs text-gray-500">コスト（実績）</div>
+          <div className="mt-1 text-lg font-bold text-red-600">{formatManYen(actualTotals.totalCosts)}</div>
+          <div className="mt-0.5 text-xs text-gray-400">目標: {formatManYen(computed.totals.cost)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
-          <div className="text-xs text-gray-500">総利益（給与前）</div>
-          <div className="mt-1 text-lg font-bold text-gray-900">{formatManYen(computed.totals.profitBeforeSalary)}</div>
+          <div className="text-xs text-gray-500">総利益（給与前・実績）</div>
+          <div className="mt-1 text-lg font-bold text-gray-900">{formatManYen(actualTotals.totalProfit)}</div>
+          <div className="mt-0.5 text-xs text-gray-400">目標: {formatManYen(computed.totals.profitBeforeSalary)}</div>
         </div>
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
           <div className="text-xs text-gray-500">給与累計（1人）</div>
@@ -399,7 +404,8 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
           </div>
           <div className="rounded-xl bg-gray-50 p-4">
             <div className="text-sm text-gray-500">コスト</div>
-            <div className="mt-1 text-xl font-bold text-red-600">-{formatManYen(computed.totals.cost)}</div>
+            <div className="mt-1 text-xl font-bold text-red-600">-{formatManYen(actualTotals.totalCosts)}</div>
+            <div className="mt-0.5 text-xs text-gray-400">目標: {formatManYen(computed.totals.cost)}</div>
           </div>
           <div className="rounded-xl bg-blue-50 p-4">
             <div className="text-sm text-gray-500">営業利益（給与前）</div>
@@ -423,8 +429,6 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         onPlanChange={handlePlanChange}
         calcOptions={calcOptions}
         isYear2={isYear2}
-        costItemTemplates={costItemTemplates}
-        onCostItemTemplatesChange={setCostItemTemplates}
         readOnly={!isEditable}
       />
 
@@ -471,7 +475,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
               >
                 <div>
                   <span className="text-sm font-medium text-emerald-800">
-                    3月通常ボーナス：個人支給合計 {formatManDecimalYen(marchBonus.personalTotal)}
+                    3月通常ボーナス：個人支給合計 {formatManDecimalYen(marchBonus.personal)}
                   </span>
                   <span className="ml-2 text-xs text-emerald-500">ゾノ25% / パンク14% / カナリア11% / 会社50%</span>
                 </div>
@@ -533,7 +537,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
                       <tr className="bg-emerald-100/60">
                         <td className="py-1.5 font-semibold">個人合計</td>
                         <td className="py-1.5 text-right font-semibold">50%</td>
-                        <td className="py-1.5 text-right font-bold">{formatManDecimalYen(marchBonus.personalTotal)}</td>
+                        <td className="py-1.5 text-right font-bold">{formatManDecimalYen(marchBonus.personal)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -547,7 +551,7 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
                       </tr>
                       <tr className="border-b border-emerald-100">
                         <td className="py-1.5">個人への3月通常ボーナス</td>
-                        <td className="py-1.5 text-right">-{formatManDecimalYen(marchBonus.personalTotal)}</td>
+                        <td className="py-1.5 text-right">-{formatManDecimalYen(marchBonus.personal)}</td>
                       </tr>
                       <tr>
                         <td className="py-1.5 font-semibold">会社最終内部留保</td>

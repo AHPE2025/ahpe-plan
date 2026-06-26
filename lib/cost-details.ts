@@ -1,5 +1,3 @@
-import type { MonthlyInput } from "./calculate"
-
 export type CostDetail = {
   id: string
   category: string
@@ -61,8 +59,15 @@ export function createEmptyCostDetail(): CostDetail {
   }
 }
 
+/** 費用詳細を持つ月次行（計画・実績共通） */
+export type CostDetailMonth = {
+  month: string
+  cost: number
+  costDetails?: CostDetail[]
+}
+
 /** 既存 cost のみの月を costDetails に変換 */
-export function migrateCostToDetails(month: MonthlyInput): MonthlyInput {
+export function migrateCostToDetails(month: CostDetailMonth): CostDetailMonth {
   if (month.costDetails && month.costDetails.length > 0) {
     const cost = costDetailsToYen(month.costDetails)
     return { ...month, cost }
@@ -93,8 +98,68 @@ function copyRecurringItems(items: CostDetail[]): CostDetail[] {
   }))
 }
 
+/** 実績行のレガシー5項目コストを costDetails に変換 */
+export function migrateMonthRowCosts<T extends {
+  month: string
+  costDetails?: CostDetail[]
+  aiCost?: number
+  travelCost?: number
+  foodCost?: number
+  personnelCostOther?: number
+  miscCost?: number
+}>(row: T): T & { costDetails: CostDetail[] } {
+  if (row.costDetails && row.costDetails.length > 0) {
+    return { ...row, costDetails: row.costDetails }
+  }
+
+  const legacyTotal =
+    (row.aiCost ?? 0) +
+    (row.travelCost ?? 0) +
+    (row.foodCost ?? 0) +
+    (row.personnelCostOther ?? 0) +
+    (row.miscCost ?? 0)
+
+  const details: CostDetail[] = []
+  const addIfPositive = (amount: number, category: string, name: string) => {
+    if (amount > 0) {
+      details.push({
+        id: generateCostDetailId(),
+        category,
+        name,
+        amount: Math.round(amount / 10_000),
+        isRecurring: false,
+        memo: "",
+      })
+    }
+  }
+
+  addIfPositive(row.aiCost ?? 0, "AIサブスク", "AI費用")
+  addIfPositive(row.travelCost ?? 0, "交通費", "交通費")
+  addIfPositive(row.foodCost ?? 0, "食費", "食費")
+  addIfPositive(row.personnelCostOther ?? 0, "業務委託", "業務委託費")
+  addIfPositive(row.miscCost ?? 0, "雑費", "雑費")
+
+  if (details.length === 0 && legacyTotal > 0) {
+    return {
+      ...row,
+      costDetails: [
+        {
+          id: `initial-cost-${row.month}`,
+          category: "その他",
+          name: "その他費用",
+          amount: Math.round(legacyTotal / 10_000),
+          isRecurring: false,
+          memo: "",
+        },
+      ],
+    }
+  }
+
+  return { ...row, costDetails: details }
+}
+
 /** 前月の継続費用を、翌月が空の場合に自動コピー */
-export function applyAutoRecurringCarryOver(plan: MonthlyInput[]): MonthlyInput[] {
+export function applyAutoRecurringCarryOver(plan: CostDetailMonth[]): CostDetailMonth[] {
   const result = plan.map((m) => ({
     ...m,
     costDetails: [...(m.costDetails ?? [])],
@@ -119,16 +184,39 @@ export function applyAutoRecurringCarryOver(plan: MonthlyInput[]): MonthlyInput[
 }
 
 /** 計画データ全体を正規化（マイグレーション + 自動引き継ぎ） */
-export function normalizePlan(plan: MonthlyInput[]): MonthlyInput[] {
-  const migrated = plan.map(migrateCostToDetails)
-  return applyAutoRecurringCarryOver(migrated)
+export function normalizePlan<T extends CostDetailMonth>(plan: T[]): T[] {
+  const migrated = plan.map((m) => migrateCostToDetails(m) as T)
+  return applyAutoRecurringCarryOver(migrated) as T[]
+}
+
+/** 実績データ全体を正規化（マイグレーション + 自動引き継ぎ） */
+export function normalizeActualRows<T extends {
+  month: string
+  costDetails?: CostDetail[]
+  aiCost?: number
+  travelCost?: number
+  foodCost?: number
+  personnelCostOther?: number
+  miscCost?: number
+}>(rows: T[]): (T & { costDetails: CostDetail[] })[] {
+  const migrated = rows.map(migrateMonthRowCosts)
+  const asCostMonths: CostDetailMonth[] = migrated.map((r) => ({
+    month: r.month,
+    cost: costDetailsToYen(r.costDetails),
+    costDetails: r.costDetails,
+  }))
+  const carried = applyAutoRecurringCarryOver(asCostMonths)
+  return migrated.map((r, i) => ({
+    ...r,
+    costDetails: carried[i].costDetails ?? [],
+  }))
 }
 
 /** 前月の継続費用を手動コピー（空なら全件、既存ありなら recurringKey 未登録分を追加） */
 export function copyRecurringFromPreviousMonth(
-  plan: MonthlyInput[],
+  plan: CostDetailMonth[],
   monthIndex: number
-): MonthlyInput[] {
+): CostDetailMonth[] {
   if (monthIndex <= 0) return plan
 
   const prevRecurring = (plan[monthIndex - 1].costDetails ?? []).filter((d) => d.isRecurring)
@@ -165,9 +253,9 @@ export function copyRecurringFromPreviousMonth(
 
 /** 保存時：直近月の継続費用を翌月へ反映（空なら全件コピー、既存は recurringKey で更新） */
 export function propagateRecurringToNextMonth(
-  plan: MonthlyInput[],
+  plan: CostDetailMonth[],
   monthIndex: number
-): MonthlyInput[] {
+): CostDetailMonth[] {
   if (monthIndex >= plan.length - 1) return plan
 
   const result = plan.map((m) => ({
@@ -244,6 +332,27 @@ export function updateCostItemTemplates(
     })
   }
   return Array.from(map.values())
+}
+
+export function updateCostItemNames(names: string[], details: CostDetail[]): string[] {
+  const set = new Set(names)
+  for (const d of details) {
+    const trimmed = d.name.trim()
+    if (trimmed) set.add(trimmed)
+  }
+  return Array.from(set)
+}
+
+export function mergeCostCategories(
+  categories: string[],
+  details: CostDetail[]
+): string[] {
+  const set = new Set(categories)
+  for (const d of details) {
+    const trimmed = d.category.trim()
+    if (trimmed) set.add(trimmed)
+  }
+  return Array.from(set)
 }
 
 export function formatCostDetailBreakdown(details: CostDetail[]): string {

@@ -24,27 +24,35 @@ import { Switch } from "@/components/ui/switch"
 import { Trash2, Plus, Copy } from "lucide-react"
 import { formatNumber, parseNumber } from "@/lib/utils"
 import {
-  COST_CATEGORY_OPTIONS,
   copyRecurringFromPreviousMonth,
   costDetailsToYen,
   createEmptyCostDetail,
   finalizeCostDetails,
   formatCostDetailBreakdown,
+  mergeCostCategories,
   propagateRecurringToNextMonth,
+  updateCostItemNames,
   updateCostItemTemplates,
   type CostDetail,
+  type CostDetailMonth,
   type CostItemTemplate,
 } from "@/lib/cost-details"
-import type { MonthlyInput } from "@/lib/calculate"
 
 type CostDetailDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   monthLabel: string
   monthIndex: number
-  plan: MonthlyInput[]
-  onSave: (plan: MonthlyInput[], templates: CostItemTemplate[]) => void
+  rows: CostDetailMonth[]
+  onSave: (
+    rows: CostDetailMonth[],
+    templates: CostItemTemplate[],
+    categories: string[],
+    names: string[]
+  ) => void
   costItemTemplates: CostItemTemplate[]
+  costCategories: string[]
+  costItemNames: string[]
 }
 
 function ManAmountInput({
@@ -89,9 +97,11 @@ function ManAmountInput({
 function CategoryInput({
   value,
   onChange,
+  categories,
 }: {
   value: string
   onChange: (v: string) => void
+  categories: string[]
 }) {
   const listId = React.useId()
   return (
@@ -104,7 +114,7 @@ function CategoryInput({
         placeholder="区分"
       />
       <datalist id={listId}>
-        {COST_CATEGORY_OPTIONS.map((c) => (
+        {categories.map((c) => (
           <option key={c} value={c} />
         ))}
       </datalist>
@@ -116,20 +126,26 @@ function NameInput({
   value,
   onChange,
   suggestions,
+  nameCandidates,
 }: {
   value: string
   onChange: (v: string) => void
   suggestions: CostItemTemplate[]
+  nameCandidates: string[]
 }) {
   const listId = React.useId()
   const uniqueNames = useMemo(() => {
     const seen = new Set<string>()
-    return suggestions.filter((t) => {
-      if (!t.name || seen.has(t.name)) return false
-      seen.add(t.name)
+    const merged = [...nameCandidates]
+    for (const t of suggestions) {
+      if (t.name) merged.push(t.name)
+    }
+    return merged.filter((name) => {
+      if (!name || seen.has(name)) return false
+      seen.add(name)
       return true
     })
-  }, [suggestions])
+  }, [suggestions, nameCandidates])
 
   return (
     <>
@@ -141,8 +157,8 @@ function NameInput({
         placeholder="名前"
       />
       <datalist id={listId}>
-        {uniqueNames.map((t) => (
-          <option key={`${t.category}-${t.name}`} value={t.name} />
+        {uniqueNames.map((name) => (
+          <option key={name} value={name} />
         ))}
       </datalist>
     </>
@@ -154,20 +170,22 @@ export default function CostDetailDialog({
   onOpenChange,
   monthLabel,
   monthIndex,
-  plan,
+  rows,
   onSave,
   costItemTemplates,
+  costCategories,
+  costItemNames,
 }: CostDetailDialogProps) {
   const [details, setDetails] = useState<CostDetail[]>([])
   const [confirmCopyOpen, setConfirmCopyOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
-      const month = plan[monthIndex]
+      const month = rows[monthIndex]
       const existing = month?.costDetails ?? []
       setDetails(existing.length > 0 ? existing.map((d) => ({ ...d })) : [createEmptyCostDetail()])
     }
-  }, [open, monthIndex, plan])
+  }, [open, monthIndex, rows])
 
   const totalMan = useMemo(() => details.reduce((s, d) => s + d.amount, 0), [details])
 
@@ -199,7 +217,7 @@ export default function CostDetailDialog({
   )
 
   const handleCopyFromPrevious = () => {
-    const currentDetails = plan[monthIndex]?.costDetails ?? []
+    const currentDetails = rows[monthIndex]?.costDetails ?? []
     if (currentDetails.length > 0) {
       setConfirmCopyOpen(true)
       return
@@ -208,7 +226,7 @@ export default function CostDetailDialog({
   }
 
   const executeCopyFromPrevious = () => {
-    const copied = copyRecurringFromPreviousMonth(plan, monthIndex)
+    const copied = copyRecurringFromPreviousMonth(rows, monthIndex)
     const newDetails = copied[monthIndex]?.costDetails ?? []
     setDetails(newDetails.length > 0 ? newDetails.map((d) => ({ ...d })) : [createEmptyCostDetail()])
     setConfirmCopyOpen(false)
@@ -221,13 +239,15 @@ export default function CostDetailDialog({
     const normalizedDetails = finalized.length > 0 ? finalized : []
     const cost = costDetailsToYen(normalizedDetails)
 
-    let newPlan = plan.map((m, i) =>
+    let newRows = rows.map((m, i) =>
       i === monthIndex ? { ...m, costDetails: normalizedDetails, cost } : { ...m }
     )
-    newPlan = propagateRecurringToNextMonth(newPlan, monthIndex)
+    newRows = propagateRecurringToNextMonth(newRows, monthIndex)
 
     const newTemplates = updateCostItemTemplates(costItemTemplates, normalizedDetails)
-    onSave(newPlan, newTemplates)
+    const newCategories = mergeCostCategories(costCategories, normalizedDetails)
+    const newNames = updateCostItemNames(costItemNames, normalizedDetails)
+    onSave(newRows, newTemplates, newCategories, newNames)
     onOpenChange(false)
   }
 
@@ -264,6 +284,7 @@ export default function CostDetailDialog({
                       <CategoryInput
                         value={detail.category}
                         onChange={(v) => updateDetail(index, { category: v })}
+                        categories={costCategories}
                       />
                     </td>
                     <td className="py-2 pr-2">
@@ -271,6 +292,7 @@ export default function CostDetailDialog({
                         value={detail.name}
                         onChange={(v) => updateDetail(index, { name: v })}
                         suggestions={costItemTemplates}
+                        nameCandidates={costItemNames}
                       />
                       {costItemTemplates.length > 0 && (
                         <div className="mt-1 flex flex-wrap gap-1">

@@ -2,9 +2,12 @@
 
 import React, { useMemo, useState } from "react"
 import Navigation from "./navigation"
-import { useData, type MonthRow } from "@/lib/data-context"
+import CostDetailDialog from "@/components/CostDetailDialog"
+import { useActualData, type ActualYearKey } from "@/hooks/use-actual-data"
+import { getMonthRowCost, type MonthRow } from "@/lib/data-context"
 import { useAuth } from "@/lib/auth-context"
-import { formatNumber, parseNumber } from "@/lib/utils"
+import { formatCostDetailBreakdown } from "@/lib/cost-details"
+import { formatNumber, parseNumber, formatManYen } from "@/lib/utils"
 
 // 件数選択肢（0〜10）
 const countOptions = Array.from({ length: 11 }, (_, i) => i)
@@ -161,11 +164,59 @@ function AmountSelect({
   return <AmountInput value={value} onChange={onChange} readOnly={readOnly} />
 }
 
+function SalaryCostCell({
+  value,
+  costDetails,
+  onClick,
+  readOnly = false,
+}: {
+  value: number
+  costDetails?: MonthRow["costDetails"]
+  onClick: () => void
+  readOnly?: boolean
+}) {
+  const breakdown = costDetails?.length ? formatCostDetailBreakdown(costDetails) : ""
 
+  if (readOnly) {
+    return (
+      <span className="inline-block px-2 py-1.5 text-right text-sm font-medium text-red-600">
+        {formatManYen(value)}
+      </span>
+    )
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      title={breakdown || "クリックして費用詳細を編集"}
+      className="cursor-pointer rounded-lg px-2 py-1.5 text-right text-sm font-medium text-red-600 hover:bg-red-50 hover:ring-1 hover:ring-red-300"
+    >
+      {formatManYen(value)}
+    </button>
+  )
+}
+
+const YEAR_TABS: { key: ActualYearKey; label: string }[] = [
+  { key: "year1", label: "1年目" },
+  { key: "year2", label: "2年目" },
+  { key: "year3", label: "3年目" },
+]
 
 export default function AhpeSalarySheet() {
   const { isEditable } = useAuth()
-  const { rows, setRows, updateRow } = useData()
+  const [activeYear, setActiveYear] = useState<ActualYearKey>("year1")
+  const {
+    rows,
+    setRows,
+    updateRow,
+    costDetailMonths,
+    handleCostSave,
+    costItemTemplates,
+    costCategories,
+    costItemNames,
+    saveStatus,
+  } = useActualData({ yearKey: activeYear, editable: isEditable })
+  const [costDialogIndex, setCostDialogIndex] = useState<number | null>(null)
   const [visibleMonthIds, setVisibleMonthIds] = useState<Set<number>>(
     new Set(rows.map((r) => r.id))
   )
@@ -197,11 +248,7 @@ export default function AhpeSalarySheet() {
       kaetaiContractCount: 0,
       kaetaiAmount: 0,
       stockRevenue: 0,
-      aiCost: 20000,
-      travelCost: 20000,
-      foodCost: 40000,
-      personnelCostOther: 0,
-      miscCost: 0,
+      costDetails: [],
     }
     setRows((prev) => [...prev, newRow])
     setVisibleMonthIds((prev) => new Set([...prev, newId]))
@@ -240,8 +287,7 @@ export default function AhpeSalarySheet() {
       const totalRevenue =
         honneAmount + row.trainingAmount + row.kaetaiAmount + row.stockRevenue
 
-      const fixedAndOtherCosts =
-        row.aiCost + row.travelCost + row.foodCost + row.personnelCostOther + row.miscCost
+      const fixedAndOtherCosts = getMonthRowCost(row)
 
       const monthlyProfitBeforeSalary = totalRevenue - fixedAndOtherCosts
 
@@ -322,7 +368,23 @@ export default function AhpeSalarySheet() {
             <p className="mt-2 text-sm leading-7 text-gray-600 md:text-base">
               給与は営業利益（給与前）の60%（1人20%）、内部留保は40%で自動計算されます。
               KAETAIは100万円・2分割（契約月50万＋翌月50万）の実入金額を入力してください。
+              コスト欄をクリックすると、月ごとの費用詳細を編集できます。
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {YEAR_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveYear(tab.key)}
+                  className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                    activeYear === tab.key
+                      ? "bg-gray-900 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
 <div className="grid gap-4 md:grid-cols-5">
@@ -414,7 +476,7 @@ export default function AhpeSalarySheet() {
           )}
 
           <div className="relative mt-4 max-h-[600px] overflow-auto">
-            <table className="min-w-[2600px] border-separate border-spacing-0">
+            <table className="min-w-[2200px] border-separate border-spacing-0">
               <thead className="sticky top-0 z-20">
                 <tr className="text-left text-xs text-gray-600 md:text-sm">
                   <th className="sticky left-0 z-30 border-b border-gray-200 bg-white px-3 py-3 font-semibold">月</th>
@@ -433,14 +495,9 @@ export default function AhpeSalarySheet() {
                   <th className="border-b border-gray-200 bg-orange-50 px-3 py-3 font-semibold">KAETAI入金</th>
                   {/* その他 */}
                   <th className="border-b border-gray-200 bg-white px-3 py-3 font-semibold">ストック</th>
-                  <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold">AI費用</th>
-                  <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold">移動費</th>
-                  <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold">食費</th>
-                  <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold">他人件費</th>
-                  <th className="border-b border-gray-200 bg-gray-50 px-3 py-3 font-semibold">雑費</th>
                   {/* 計算結果 */}
                   <th className="border-b border-gray-200 bg-white px-3 py-3 font-semibold">総売上</th>
-                  <th className="border-b border-gray-200 bg-white px-3 py-3 font-semibold">コスト</th>
+                  <th className="border-b border-gray-200 bg-red-50 px-3 py-3 font-semibold text-red-700">コスト</th>
                   <th className="border-b border-gray-200 bg-white px-3 py-3 font-semibold">営業利益</th>
                   <th className="border-b border-gray-200 bg-blue-50 px-3 py-3 font-semibold">給与（1人）</th>
                   <th className="border-b border-gray-200 bg-blue-50 px-3 py-3 font-semibold">給与（3人）</th>
@@ -523,49 +580,17 @@ export default function AhpeSalarySheet() {
                       />
                     </td>
 
-                    {/* 経費 */}
-                    <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
-                      <AmountSelect
-                        readOnly={!isEditable}
-                        value={row.aiCost}
-                        onChange={(val) => updateRow(row.id, "aiCost", val)}
-                      />
-                    </td>
-                    <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
-                      <AmountSelect
-                        readOnly={!isEditable}
-                        value={row.travelCost}
-                        onChange={(val) => updateRow(row.id, "travelCost", val)}
-                      />
-                    </td>
-                    <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
-                      <AmountSelect
-                        readOnly={!isEditable}
-                        value={row.foodCost}
-                        onChange={(val) => updateRow(row.id, "foodCost", val)}
-                      />
-                    </td>
-                    <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
-                      <AmountSelect
-                        readOnly={!isEditable}
-                        value={row.personnelCostOther}
-                        onChange={(val) => updateRow(row.id, "personnelCostOther", val)}
-                      />
-                    </td>
-                    <td className="border-b border-gray-100 bg-gray-50/50 px-3 py-3">
-                      <AmountSelect
-                        readOnly={!isEditable}
-                        value={row.miscCost}
-                        onChange={(val) => updateRow(row.id, "miscCost", val)}
-                      />
-                    </td>
-
-{/* 計算結果 */}
+                    {/* 計算結果 */}
                     <td className="border-b border-gray-100 px-3 py-3 font-medium">
                       {formatYen(row.totalRevenue)}
                     </td>
-                    <td className="border-b border-gray-100 px-3 py-3 font-medium">
-                      {formatYen(row.fixedAndOtherCosts)}
+                    <td className="border-b border-gray-100 bg-red-50/30 px-3 py-3">
+                      <SalaryCostCell
+                        readOnly={!isEditable}
+                        value={row.fixedAndOtherCosts}
+                        costDetails={row.costDetails}
+                        onClick={() => setCostDialogIndex(rows.findIndex((r) => r.id === row.id))}
+                      />
                     </td>
                     <td className="border-b border-gray-100 px-3 py-3 font-bold text-gray-900">
                       {formatYen(row.monthlyProfitBeforeSalary)}
@@ -590,6 +615,27 @@ export default function AhpeSalarySheet() {
               </tbody>
             </table>
           </div>
+
+          {saveStatus === "saved" && (
+            <p className="mt-3 text-center text-xs text-gray-400">データを保存しました</p>
+          )}
+          {saveStatus === "error" && (
+            <p className="mt-3 text-center text-xs text-red-500">保存エラー</p>
+          )}
+
+          {costDialogIndex !== null && (
+            <CostDetailDialog
+              open={costDialogIndex !== null}
+              onOpenChange={(open) => !open && setCostDialogIndex(null)}
+              monthLabel={rows[costDialogIndex]?.month ?? ""}
+              monthIndex={costDialogIndex}
+              rows={costDetailMonths}
+              onSave={handleCostSave}
+              costItemTemplates={costItemTemplates}
+              costCategories={costCategories}
+              costItemNames={costItemNames}
+            />
+          )}
         </div>
 
 <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-200">

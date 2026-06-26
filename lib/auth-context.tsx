@@ -97,7 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const isLoggedIn = Boolean(user)
-  const canViewApp = isLoggedIn || isGuestView
+  const supabaseReady = isSupabaseConfigured()
+  const canViewApp = supabaseReady ? isLoggedIn : isLoggedIn || isGuestView
   const isEditable = isLoggedIn
 
   return (
