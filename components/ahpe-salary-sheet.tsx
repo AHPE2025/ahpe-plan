@@ -5,7 +5,6 @@ import Navigation from "./navigation"
 import CostDetailDialog from "@/components/CostDetailDialog"
 import { useActualData, type ActualYearKey } from "@/hooks/use-actual-data"
 import { getMonthRowCost, type MonthRow } from "@/lib/data-context"
-import { useAuth } from "@/lib/auth-context"
 import { formatCostDetailBreakdown } from "@/lib/cost-details"
 import { formatNumber, parseNumber, formatManYen } from "@/lib/utils"
 
@@ -203,7 +202,6 @@ const YEAR_TABS: { key: ActualYearKey; label: string }[] = [
 ]
 
 export default function AhpeSalarySheet() {
-  const { isEditable } = useAuth()
   const [activeYear, setActiveYear] = useState<ActualYearKey>("year1")
   const {
     rows,
@@ -215,7 +213,7 @@ export default function AhpeSalarySheet() {
     costCategories,
     costItemNames,
     saveStatus,
-  } = useActualData({ yearKey: activeYear, editable: isEditable })
+  } = useActualData({ yearKey: activeYear })
   const [costDialogIndex, setCostDialogIndex] = useState<number | null>(null)
   const [visibleMonthIds, setVisibleMonthIds] = useState<Set<number>>(
     new Set(rows.map((r) => r.id))
@@ -446,14 +444,12 @@ export default function AhpeSalarySheet() {
               >
                 月を選択 ({visibleMonthIds.size}/{rows.length})
               </button>
-              {isEditable && (
-                <button
-                  onClick={addMonth}
-                  className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-                >
-                  + 月を追加
-                </button>
-              )}
+              <button
+                onClick={addMonth}
+                className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              >
+                + 月を追加
+              </button>
             </div>
           </div>
 
@@ -514,7 +510,6 @@ export default function AhpeSalarySheet() {
                     {/* HONNE（人数ベース） */}
                     <td className="border-b border-gray-100 bg-blue-50/50 px-3 py-3">
                       <PersonSelect
-                        readOnly={!isEditable}
                         value={row.honnePersonCount}
                         onChange={(val) => updateRow(row.id, "honnePersonCount", val)}
                       />
@@ -529,7 +524,6 @@ export default function AhpeSalarySheet() {
                     {/* AI研修 */}
                     <td className="border-b border-gray-100 bg-green-50/50 px-3 py-3">
                       <CountSelect
-                        readOnly={!isEditable}
                         value={row.trainingContractCount}
                         onChange={(val) => updateRow(row.id, "trainingContractCount", val)}
                       />
@@ -539,14 +533,12 @@ export default function AhpeSalarySheet() {
                     </td>
                     <td className="border-b border-gray-100 bg-green-50/50 px-3 py-3">
                       <CountSelect
-                        readOnly={!isEditable}
                         value={row.trainingActiveCount}
                         onChange={(val) => updateRow(row.id, "trainingActiveCount", val)}
                       />
                     </td>
                     <td className="border-b border-gray-100 bg-green-50/50 px-3 py-3">
                       <AmountSelect
-                        readOnly={!isEditable}
                         value={row.trainingAmount}
                         onChange={(val) => updateRow(row.id, "trainingAmount", val)}
                       />
@@ -555,7 +547,6 @@ export default function AhpeSalarySheet() {
                     {/* KAETAI */}
                     <td className="border-b border-gray-100 bg-orange-50/50 px-3 py-3">
                       <CountSelect
-                        readOnly={!isEditable}
                         value={row.kaetaiContractCount}
                         onChange={(val) => updateRow(row.id, "kaetaiContractCount", val)}
                       />
@@ -565,7 +556,6 @@ export default function AhpeSalarySheet() {
                     </td>
                     <td className="border-b border-gray-100 bg-orange-50/50 px-3 py-3">
                       <AmountSelect
-                        readOnly={!isEditable}
                         value={row.kaetaiAmount}
                         onChange={(val) => updateRow(row.id, "kaetaiAmount", val)}
                       />
@@ -574,7 +564,6 @@ export default function AhpeSalarySheet() {
                     {/* ストック */}
                     <td className="border-b border-gray-100 px-3 py-3">
                       <AmountSelect
-                        readOnly={!isEditable}
                         value={row.stockRevenue}
                         onChange={(val) => updateRow(row.id, "stockRevenue", val)}
                       />
@@ -586,7 +575,6 @@ export default function AhpeSalarySheet() {
                     </td>
                     <td className="border-b border-gray-100 bg-red-50/30 px-3 py-3">
                       <SalaryCostCell
-                        readOnly={!isEditable}
                         value={row.fixedAndOtherCosts}
                         costDetails={row.costDetails}
                         onClick={() => setCostDialogIndex(rows.findIndex((r) => r.id === row.id))}

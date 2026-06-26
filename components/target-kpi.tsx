@@ -13,7 +13,6 @@ import { calculateYearPlan, type YearCalcOptions } from "@/lib/calculate"
 import { DEFAULT_CORPORATE_SETTINGS } from "@/lib/corporate"
 import { formatNumber, parseNumber, formatManYen, formatManDecimalYen } from "@/lib/utils"
 import { useYearPlan } from "@/hooks/use-year-plan"
-import { useAuth } from "@/lib/auth-context"
 
 function formatYen(value: number) {
   return `¥${formatNumber(value)}`
@@ -153,7 +152,6 @@ function HonneContractPeopleTargetCell({
 }
 
 function YearView({ isYear2 }: { isYear2: boolean }) {
-  const { isEditable } = useAuth()
   const targets = isYear2 ? year2Targets : year1Targets
   const initialMonths = isYear2 ? year2Months : year1Months
 
@@ -169,7 +167,6 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
     yearKey: isYear2 ? "year2" : "year1",
     initialMonths,
     initialCorporateSettings: isYear2 ? { ...DEFAULT_CORPORATE_SETTINGS } : undefined,
-    editable: isEditable,
   })
 
   const resolvedCorporateSettings = corporateSettings ?? { ...DEFAULT_CORPORATE_SETTINGS }
@@ -266,7 +263,6 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         <CorporateSettingsPanel
           settings={resolvedCorporateSettings}
           onChange={setCorporateSettings}
-          readOnly={!isEditable}
         />
       )}
 
@@ -292,7 +288,6 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
                     actual={honneContractPeopleActual}
                     target={honneContractPeopleTarget}
                     onTargetChange={setHonneContractPeopleTarget}
-                    readOnly={!isEditable}
                   />
                 </td>
               </tr>
@@ -429,7 +424,6 @@ function YearView({ isYear2 }: { isYear2: boolean }) {
         onPlanChange={handlePlanChange}
         calcOptions={calcOptions}
         isYear2={isYear2}
-        readOnly={!isEditable}
       />
 
       {saveStatus === "saved" && (

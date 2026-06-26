@@ -2,12 +2,9 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
 
 export default function Navigation() {
   const pathname = usePathname()
-  const { user, isEditable, isGuestView, signOut } = useAuth()
 
   const links = [
     { href: "/", label: "月次入力・自動計算表" },
@@ -36,20 +33,9 @@ export default function Navigation() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {!isEditable && (
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
-                {isGuestView ? "閲覧のみ" : "編集不可"}
-              </span>
-            )}
-            {user?.email && (
-              <span className="hidden text-sm text-gray-500 sm:inline">{user.email}</span>
-            )}
-            {user && (
-              <Button variant="outline" size="sm" onClick={() => void signOut()}>
-                ログアウト
-              </Button>
-            )}
+          <div className="hidden text-right text-xs leading-5 text-gray-500 sm:block">
+            <p>青色の数値はクリックして編集できます</p>
+            <p>編集内容はこのブラウザに保存されます</p>
           </div>
         </div>
       </div>

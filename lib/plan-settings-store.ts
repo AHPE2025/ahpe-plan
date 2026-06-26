@@ -2,40 +2,23 @@ import {
   COST_CATEGORY_OPTIONS,
   type CostItemTemplate,
 } from "@/lib/cost-details"
-import { isSupabaseConfigured, supabaseFetch } from "@/lib/supabase/client"
+import type { PlanSettings } from "@/lib/reward-management-storage"
+import {
+  readPlanSettingsFromStorage,
+  writePlanSettingsToStorage,
+} from "@/lib/reward-management-storage"
 
 export type PlanSettingKey =
   | "cost_item_templates"
   | "cost_categories"
   | "cost_item_names"
 
-export type PlanSettings = {
-  costItemTemplates: CostItemTemplate[]
-  costCategories: string[]
-  costItemNames: string[]
-}
+export type { PlanSettings } from "@/lib/reward-management-storage"
 
-const LOCAL_STORAGE_PREFIX = "ahpe-plan-setting-"
-
-function localStorageKey(settingKey: PlanSettingKey): string {
-  return `${LOCAL_STORAGE_PREFIX}${settingKey}`
-}
-
-function readLocalSetting<T>(settingKey: PlanSettingKey): T | null {
-  if (typeof window === "undefined") return null
-  const raw = localStorage.getItem(localStorageKey(settingKey))
-  if (!raw) return null
-  try {
-    return JSON.parse(raw) as T
-  } catch (e) {
-    console.error(`[loadPlanSetting] localStorage parse error (${settingKey}):`, e)
-    return null
-  }
-}
-
-function writeLocalSetting<T>(settingKey: PlanSettingKey, data: T): void {
-  if (typeof window === "undefined") return
-  localStorage.setItem(localStorageKey(settingKey), JSON.stringify(data))
+const SETTING_KEY_MAP: Record<PlanSettingKey, keyof PlanSettings> = {
+  cost_item_templates: "costItemTemplates",
+  cost_categories: "costCategories",
+  cost_item_names: "costItemNames",
 }
 
 export function defaultCostCategories(): string[] {
@@ -53,101 +36,49 @@ export function defaultPlanSettings(): PlanSettings {
 export async function loadPlanSetting<T>(
   settingKey: PlanSettingKey
 ): Promise<T | null> {
-  if (isSupabaseConfigured()) {
-    try {
-      const { data, error } = await supabaseFetch<Array<{ data: T }>>(
-        `ahpe_plan_settings?setting_key=eq.${settingKey}&select=data`,
-        { method: "GET" }
-      )
-
-      if (error) {
-        console.error(`[loadPlanSetting] Supabase load failed (${settingKey}):`, error)
-      } else if (data?.[0]?.data !== undefined) {
-        writeLocalSetting(settingKey, data[0].data)
-        return data[0].data
-      } else {
-        return null
-      }
-    } catch (e) {
-      console.error(`[loadPlanSetting] Supabase connection error (${settingKey}):`, e)
-    }
-
-    return null
-  }
-
-  return readLocalSetting<T>(settingKey)
+  const settings = readPlanSettingsFromStorage()
+  const field = SETTING_KEY_MAP[settingKey]
+  const value = settings[field]
+  return (value as T) ?? null
 }
 
 export async function savePlanSetting<T>(
   settingKey: PlanSettingKey,
   data: T
-): Promise<{ ok: boolean; via: "supabase" | "localStorage" | "none"; error?: string }> {
-  if (isSupabaseConfigured()) {
-    try {
-      const { error } = await supabaseFetch<unknown>(
-        "ahpe_plan_settings?on_conflict=setting_key",
-        {
-          method: "POST",
-          headers: {
-            Prefer: "resolution=merge-duplicates",
-          },
-          body: JSON.stringify({
-            setting_key: settingKey,
-            data,
-            updated_at: new Date().toISOString(),
-          }),
-        }
-      )
-
-      if (error) {
-        console.error(`[savePlanSetting] Supabase save failed (${settingKey}):`, error)
-        return { ok: false, via: "none", error }
-      }
-
-      writeLocalSetting(settingKey, data)
-      return { ok: true, via: "supabase" }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error"
-      console.error(`[savePlanSetting] Supabase connection error (${settingKey}):`, e)
-      return { ok: false, via: "none", error: message }
-    }
+): Promise<{ ok: boolean; via: "localStorage" | "none"; error?: string }> {
+  if (typeof window === "undefined") {
+    return { ok: false, via: "none", error: "Storage unavailable" }
   }
 
-  if (typeof window !== "undefined") {
-    writeLocalSetting(settingKey, data)
-    return { ok: true, via: "localStorage" }
-  }
-
-  return { ok: false, via: "none", error: "Storage unavailable" }
+  const settings = readPlanSettingsFromStorage()
+  const field = SETTING_KEY_MAP[settingKey]
+  writePlanSettingsToStorage({ ...settings, [field]: data })
+  return { ok: true, via: "localStorage" }
 }
 
 export async function loadAllPlanSettings(): Promise<PlanSettings> {
   const defaults = defaultPlanSettings()
-  const [templates, categories, names] = await Promise.all([
-    loadPlanSetting<CostItemTemplate[]>("cost_item_templates"),
-    loadPlanSetting<string[]>("cost_categories"),
-    loadPlanSetting<string[]>("cost_item_names"),
-  ])
+  const settings = readPlanSettingsFromStorage()
 
   return {
-    costItemTemplates: templates ?? defaults.costItemTemplates,
+    costItemTemplates: settings.costItemTemplates ?? defaults.costItemTemplates,
     costCategories:
-      categories && categories.length > 0 ? categories : defaults.costCategories,
-    costItemNames: names ?? defaults.costItemNames,
+      settings.costCategories?.length > 0
+        ? settings.costCategories
+        : defaults.costCategories,
+    costItemNames: settings.costItemNames ?? defaults.costItemNames,
   }
 }
 
 export async function saveAllPlanSettings(
   settings: PlanSettings
 ): Promise<{ ok: boolean; error?: string }> {
-  const results = await Promise.all([
-    savePlanSetting("cost_item_templates", settings.costItemTemplates),
-    savePlanSetting("cost_categories", settings.costCategories),
-    savePlanSetting("cost_item_names", settings.costItemNames),
-  ])
+  if (typeof window === "undefined") {
+    return { ok: false, error: "Storage unavailable" }
+  }
 
-  const failed = results.find((r) => !r.ok)
-  return failed ? { ok: false, error: failed.error } : { ok: true }
+  writePlanSettingsToStorage(settings)
+  return { ok: true }
 }
 
 /** 旧 year_data JSONB に含まれていたテンプレートを settings へ移行 */
